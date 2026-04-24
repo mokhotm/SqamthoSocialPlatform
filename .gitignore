@@ -4,3 +4,13 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+uploads/
+check-posts.js
+database-schema-analyzer.js
+login-test.html
+simple-server.ts
+test-*.js
+test-*.ts
+scratch/
+qdrant_storage/
+esbuild_log.txt
