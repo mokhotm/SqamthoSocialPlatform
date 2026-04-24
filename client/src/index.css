@@ -94,6 +94,15 @@
     @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
   }
   
+  /* Navigation items */
+  .nav-item {
+    @apply text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200;
+  }
+
+  .nav-item-active {
+    @apply bg-primary/10 text-primary;
+  }
+  
   /* Button animations */
   .btn-pulse {
     animation: pulse 1.5s infinite;

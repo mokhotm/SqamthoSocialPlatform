@@ -9,20 +9,37 @@ export default defineConfig({
     react(),
     runtimeErrorOverlay(),
     themePlugin(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
-      : []),
   ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+    },
+  },
+  server: {
+    host: true, // Listen on all addresses
+    port: 5000,
+    strictPort: true,
+    hmr: {
+      protocol: "ws",
+      host: "localhost",
+      port: 5000,
+      clientPort: 5000,
+      path: "/_hmr",
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/ws': {
+        target: 'ws://localhost:5000',
+        ws: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/ws/, ''),
+      },
     },
   },
   root: path.resolve(import.meta.dirname, "client"),

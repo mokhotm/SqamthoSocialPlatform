@@ -1,13 +1,9 @@
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import Header from "@/components/header";
-import LeftSidebar from "@/components/left-sidebar";
-import RightSidebar from "@/components/right-sidebar";
-import MobileNavigation from "@/components/mobile-navigation";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import Layout from "@/components/layout";
 import CreatePost from "@/components/create-post";
 import Stories from "@/components/stories";
 import PostCard from "@/components/post-card";
-import ChatOverlay from "@/components/chat/chat-overlay";
+
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -42,15 +38,19 @@ interface Post {
 export default function HomePage() {
   // Fetch posts
   const { 
-    data: posts = [], 
+    data,
     isLoading,
     isError,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage 
-  } = useQuery<Post[]>({
-    queryKey: ["/api/posts"]
+  } = useInfiniteQuery<Post[]>({
+    queryKey: ["/api/posts"],
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === 10 ? allPages.length + 1 : undefined;
+    },
+    initialPageParam: 1
   });
 
   // Example stories data
@@ -102,14 +102,7 @@ export default function HomePage() {
   ];
 
   return (
-    <>
-      <Header />
-      <MobileNavigation />
-      
-      <main className="container mx-auto pt-20 pb-20 md:pt-24 md:pb-8 px-4 md:flex">
-        <LeftSidebar />
-        
-        <div className="flex-1 w-full md:px-4 lg:w-3/5 mx-auto">
+    <Layout>
           {/* Create Post */}
           <CreatePost />
           
@@ -131,24 +124,26 @@ export default function HomePage() {
                 Try Again
               </Button>
             </div>
-          ) : posts.length === 0 ? (
+          ) : !data?.pages[0] || data.pages[0].length === 0 ? (
             <div className="bg-white rounded-lg shadow-sm p-8 text-center">
               <p className="text-gray-500">No posts yet. Be the first to post!</p>
             </div>
           ) : (
             <>
-              {posts.map((post) => (
-                <PostCard 
-                  key={post.id}
-                  id={post.id}
-                  content={post.content}
-                  imageUrl={post.imageUrl}
-                  createdAt={post.createdAt}
-                  author={post.author}
-                  comments={post.comments}
-                  reactions={post.reactions}
-                />
-              ))}
+              {data?.pages.map((page) => 
+                page.map((post) => (
+                  <PostCard 
+                    key={post.id}
+                    id={post.id}
+                    content={post.content}
+                    imageUrl={post.imageUrl}
+                    createdAt={post.createdAt}
+                    author={post.author}
+                    comments={post.comments}
+                    reactions={post.reactions}
+                  />
+                ))
+              )}
               
               {hasNextPage && (
                 <div className="flex justify-center pb-6 pt-2">
@@ -171,12 +166,6 @@ export default function HomePage() {
               )}
             </>
           )}
-        </div>
-        
-        <RightSidebar />
-      </main>
-      
-      <ChatOverlay />
-    </>
+    </Layout>
   );
 }

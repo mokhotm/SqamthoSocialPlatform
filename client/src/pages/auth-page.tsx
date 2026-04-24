@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +23,9 @@ import { FileUpload } from "@/components/ui/file-upload";
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<string>("login");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [_, navigate] = useLocation();
   const { user, loginMutation, registerMutation } = useAuth();
 
@@ -126,12 +130,25 @@ export default function AuthPage() {
                             <a href="#" className="text-xs text-primary hover:underline">Forgot password?</a>
                           </div>
                           <FormControl>
-                            <Input 
-                              type="password" 
-                              placeholder="Enter your password" 
-                              className="rounded-lg border-gray-200 focus:border-primary focus:ring-primary/20" 
-                              {...field} 
-                            />
+                            <div className="relative">
+                              <Input 
+                                type={showLoginPassword ? "text" : "password"}
+                                placeholder="Enter your password" 
+                                className="rounded-lg border-gray-200 focus:border-primary focus:ring-primary/20 pr-10"
+                                {...field} 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                              >
+                                {showLoginPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
                           </FormControl>
                           <FormMessage className="text-red-500 text-sm" />
                         </FormItem>
@@ -232,12 +249,25 @@ export default function AuthPage() {
                           <FormItem className="flex-1">
                             <FormLabel className="text-gray-700">Password</FormLabel>
                             <FormControl>
-                              <Input 
-                                type="password" 
-                                placeholder="Create a password" 
-                                className="rounded-lg border-gray-200 focus:border-primary focus:ring-primary/20"
-                                {...field} 
-                              />
+                              <div className="relative">
+                                <Input 
+                                  type={showRegisterPassword ? "text" : "password"}
+                                  placeholder="Create a password" 
+                                  className="rounded-lg border-gray-200 focus:border-primary focus:ring-primary/20 pr-10"
+                                  {...field} 
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                >
+                                  {showRegisterPassword ? (
+                                    <EyeOff className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
                             </FormControl>
                             <FormMessage className="text-red-500 text-sm" />
                           </FormItem>
@@ -251,12 +281,25 @@ export default function AuthPage() {
                           <FormItem className="flex-1">
                             <FormLabel className="text-gray-700">Confirm Password</FormLabel>
                             <FormControl>
-                              <Input 
-                                type="password" 
-                                placeholder="Confirm your password" 
-                                className="rounded-lg border-gray-200 focus:border-primary focus:ring-primary/20"
-                                {...field} 
-                              />
+                              <div className="relative">
+                                <Input 
+                                  type={showConfirmPassword ? "text" : "password"}
+                                  placeholder="Confirm your password" 
+                                  className="rounded-lg border-gray-200 focus:border-primary focus:ring-primary/20 pr-10"
+                                  {...field} 
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                >
+                                  {showConfirmPassword ? (
+                                    <EyeOff className="h-4 w-4" />
+                                  ) : (
+                                    <Eye className="h-4 w-4" />
+                                  )}
+                                </button>
+                              </div>
                             </FormControl>
                             <FormMessage className="text-red-500 text-sm" />
                           </FormItem>
@@ -426,6 +469,30 @@ export default function AuthPage() {
               <div className="ml-4">
                 <h2 className="text-lg font-semibold text-gray-900">Join Communities</h2>
                 <p className="mt-1 text-gray-600">Find local groups that match your interests and connect with like-minded South Africans.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start p-4 rounded-xl bg-white shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-300">
+              <div className="flex-shrink-0 bg-gradient-to-br from-emerald-500 to-emerald-600/70 p-3 rounded-xl shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <h2 className="text-lg font-semibold text-gray-900">Money Management</h2>
+                <p className="mt-1 text-gray-600">Track your finances, manage subscriptions, and achieve your financial goals with our comprehensive tools.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start p-4 rounded-xl bg-white shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-300">
+              <div className="flex-shrink-0 bg-gradient-to-br from-blue-500 to-blue-600/70 p-3 rounded-xl shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <div className="ml-4">
+                <h2 className="text-lg font-semibold text-gray-900">Health & Wellness</h2>
+                <p className="mt-1 text-gray-600">Monitor your health metrics, track your fitness journey, and access wellness resources tailored for South Africans.</p>
               </div>
             </div>
           </div>

@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Bell, MessageCircle, ChevronDown, Home, Compass, Users, Calendar } from "lucide-react";
+import { Search, Bell, MessageCircle, ChevronDown, Home, Compass, Users, Calendar, Heart, Wallet } from "lucide-react";
 import { useState } from "react";
 import { 
   DropdownMenu, 
@@ -43,6 +43,27 @@ export default function Header() {
               <SqamthoLogoWithStyle size={30} textColor={theme === 'dark' ? '#f3f4f6' : undefined} />
             </Link>
             <div className="flex items-center space-x-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-2 rounded-full bg-gray-50 text-gray-600 hover:bg-primary/10 hover:text-primary">
+                    <ChevronDown className="h-5 w-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem asChild>
+                    <Link href="/health" className="w-full flex items-center">
+                      <Heart className="h-4 w-4 mr-2" />
+                      Health
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/money" className="w-full flex items-center">
+                      <Wallet className="h-4 w-4 mr-2" />
+                      Money
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <button className="p-2 rounded-full bg-gray-50 text-gray-600 hover:bg-primary/10 hover:text-primary">
                 <Search className="h-5 w-5" />
               </button>
@@ -66,21 +87,29 @@ export default function Header() {
               </Link>
               <div className="ml-10">
                 <div className="flex items-center space-x-2">
-                  <Link href="/" className={`nav-item flex items-center space-x-2 ${location === "/" ? "nav-item-active" : ""}`}>
+                  <Link href="/" className={`flex items-center space-x-2 px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200 ${location === "/" ? "bg-primary/5 text-primary" : ""}`}>
                     <Home className="h-5 w-5" />
                     <span>Home</span>
                   </Link>
-                  <Link href="/explore" className={`nav-item flex items-center space-x-2 ${location === "/explore" ? "nav-item-active" : ""}`}>
+                  <Link href="/explore" className={`flex items-center space-x-2 px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200 ${location === "/explore" ? "bg-primary/5 text-primary" : ""}`}>
                     <Compass className="h-5 w-5" />
                     <span>Explore</span>
                   </Link>
-                  <Link href="/groups" className={`nav-item flex items-center space-x-2 ${location === "/groups" ? "nav-item-active" : ""}`}>
+                  <Link href="/groups" className={`flex items-center space-x-2 px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200 ${location === "/groups" ? "bg-primary/5 text-primary" : ""}`}>
                     <Users className="h-5 w-5" />
                     <span>Groups</span>
                   </Link>
-                  <Link href="/events" className={`nav-item flex items-center space-x-2 ${location === "/events" ? "nav-item-active" : ""}`}>
+                  <Link href="/events" className={`flex items-center space-x-2 px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200 ${location === "/events" ? "bg-primary/5 text-primary" : ""}`}>
                     <Calendar className="h-5 w-5" />
                     <span>Events</span>
+                  </Link>
+                  <Link href="/health" className={`flex items-center space-x-2 px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200 ${location === "/health" ? "bg-primary/5 text-primary" : ""}`}>
+                    <Heart className="h-5 w-5" />
+                    <span>Health</span>
+                  </Link>
+                  <Link href="/money" className={`flex items-center space-x-2 px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-primary/5 transition-colors duration-200 ${location === "/money" ? "bg-primary/5 text-primary" : ""}`}>
+                    <Wallet className="h-5 w-5" />
+                    <span>Money</span>
                   </Link>
                 </div>
               </div>

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import Header from "@/components/header";
-import MobileNavigation from "@/components/mobile-navigation";
+import Layout from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -149,10 +148,7 @@ export default function MessagesPage() {
 
   return (
     <>
-      <Header />
-      <MobileNavigation />
-      
-      <main className="container mx-auto pt-20 pb-20 md:pt-24 md:pb-8 px-0 md:px-4">
+    <Layout showRightSidebar={false}>
         <div className="bg-white rounded-lg shadow-sm overflow-hidden h-[calc(100vh-9rem)]">
           <div className="flex h-full">
             {/* Left sidebar with conversations */}
@@ -373,7 +369,7 @@ export default function MessagesPage() {
             </div>
           </div>
         </div>
-      </main>
+    </Layout>
     </>
   );
 }

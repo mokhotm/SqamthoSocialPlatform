@@ -5,9 +5,13 @@ let reconnectCount = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
 export const setupWebSocket = (userId: number) => {
-  if (socket) {
-    closeWebSocket();
+  // If there's already a socket and it's open or connecting, don't create a new one
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    return;
   }
+
+  // Close any existing socket
+  closeWebSocket();
 
   try {
     // Clear any previous connection attempts
@@ -17,8 +21,9 @@ export const setupWebSocket = (userId: number) => {
     }
 
     // Get the current URL protocol and host
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws?userId=${userId}`;
     
     console.log(`Attempting WebSocket connection to ${wsUrl}`);
     socket = new WebSocket(wsUrl);
@@ -31,8 +36,8 @@ export const setupWebSocket = (userId: number) => {
       // Authenticate the connection
       if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
-          type: 'auth',
-          userId
+          type: 'authenticate',
+          data: { userId }
         }));
         console.log('Sent authentication message to WebSocket server');
       }
@@ -56,11 +61,17 @@ export const setupWebSocket = (userId: number) => {
     };
     
     socket.onclose = (event) => {
+      // Don't log or attempt reconnect for normal closures
+      if (event.code === 1000 || event.code === 1001) {
+        console.log('WebSocket closed normally');
+        return;
+      }
+
       console.log(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`);
       
-      // Attempt to reconnect with exponential backoff
+      // Only attempt to reconnect if we haven't reached max attempts and it wasn't a normal closure
       if (reconnectTimer === null && reconnectCount < MAX_RECONNECT_ATTEMPTS) {
-        const delay = Math.min(1000 * (2 ** reconnectCount), 30000);
+        const delay = Math.min(1000 * Math.pow(2, reconnectCount), 30000);
         console.log(`Attempting to reconnect in ${delay/1000} seconds (attempt ${reconnectCount + 1}/${MAX_RECONNECT_ATTEMPTS})`);
         
         reconnectTimer = setTimeout(() => {
@@ -91,13 +102,18 @@ export const closeWebSocket = () => {
   }
   
   if (socket) {
-    socket.close();
+    // Only close if it's not already closing or closed
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close(1000, 'Normal closure');
+    }
     socket = null;
   }
+  // Reset reconnect count when explicitly closing
+  reconnectCount = 0;
 };
 
 export const sendWebSocketMessage = (message: any) => {
-  if (socket && socket.readyState === WebSocket.OPEN) {
+  if (socket && socket !== null && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(message));
     return true;
   }
