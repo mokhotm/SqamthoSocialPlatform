@@ -3,21 +3,13 @@ import { db } from '../db.js';
 import { conversations, conversationParticipants, messages, users } from '../../shared/schema.js';
 import { sql } from 'drizzle-orm';
 
-// TypeScript doesn't know these modules exist yet, so we'll manually import them
-// @ts-ignore
-import { authenticateToken } from '../middleware/auth.js';
+import { getAuthenticatedUserId } from '../middleware/session-auth.js';
 // @ts-ignore
 import { io } from '../socket.js';
 
 const router = express.Router();
 
 // Type definitions
-interface RequestWithUser extends Request {
-    user?: {
-        id: number;
-    };
-}
-
 interface ConversationResponse {
     id: number;
     userId: number | null;
@@ -43,11 +35,12 @@ interface MessageResponse {
 }
 
 // Get all conversations for a user
-router.get('/', authenticateToken, async (req: RequestWithUser, res: Response) => {
-    const userId = req.user?.id;
+router.get('/', async (req: Request, res: Response) => {
+    const userId = getAuthenticatedUserId(req);
 
     if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
+        // Return empty array instead of 401 to prevent noisy browser console errors
+        return res.json([]);
     }
 
     try {
@@ -107,8 +100,8 @@ router.get('/', authenticateToken, async (req: RequestWithUser, res: Response) =
 });
 
 // Get messages for a specific conversation
-router.get('/:conversationId/messages', authenticateToken, async (req: RequestWithUser, res: Response) => {
-    const userId = req.user?.id;
+router.get('/:conversationId/messages', async (req: Request, res: Response) => {
+    const userId = getAuthenticatedUserId(req);
     const conversationId = parseInt(req.params.conversationId);
 
     if (!userId) {
@@ -169,8 +162,8 @@ router.get('/:conversationId/messages', authenticateToken, async (req: RequestWi
 });
 
 // Send a message in a conversation
-router.post('/:conversationId/messages', authenticateToken, async (req: RequestWithUser, res: Response) => {
-    const userId = req.user?.id;
+router.post('/:conversationId/messages', async (req: Request, res: Response) => {
+    const userId = getAuthenticatedUserId(req);
     const conversationId = parseInt(req.params.conversationId);
     const { content } = req.body;
 
@@ -237,8 +230,8 @@ router.post('/:conversationId/messages', authenticateToken, async (req: RequestW
 });
 
 // Create a new conversation
-router.post('/', authenticateToken, async (req: RequestWithUser, res: Response) => {
-    const userId = req.user?.id;
+router.post('/', async (req: Request, res: Response) => {
+    const userId = getAuthenticatedUserId(req);
     const { participantId } = req.body;
 
     if (!userId) {

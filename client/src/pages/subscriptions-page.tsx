@@ -14,6 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/hooks/use-auth';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Subscription {
   id: number;
@@ -78,6 +80,7 @@ interface SubscriptionsPageProps {
 
 export default function SubscriptionsPage({ embedded = false }: SubscriptionsPageProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [formData, setFormData] = useState<SubscriptionFormData>(initialFormData);
@@ -89,8 +92,11 @@ export default function SubscriptionsPage({ embedded = false }: SubscriptionsPag
 
   const fetchSubscriptions = async () => {
     try {
-      const userId = 1; // TODO: Get from auth context
-      const response = await fetch(`/api/subscriptions/${userId}`);
+      if (!user?.id) {
+        console.warn('No authenticated user found');
+        return;
+      }
+      const response = await apiRequest("GET", `/api/subscriptions/${user.id}`);
       const data = await response.json();
       setSubscriptions(data);
     } catch (error) {
@@ -104,17 +110,20 @@ export default function SubscriptionsPage({ embedded = false }: SubscriptionsPag
 
   const handleSubmit = async () => {
     try {
-      const userId = 1; // TODO: Get from auth context
-      const response = await fetch('/api/subscriptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          userId,
-          nextBillingDate: formData.nextBillingDate.toISOString(),
-          status: 'active',
-          autoRenew: true,
-        }),
+      if (!user?.id) {
+        toast({
+          title: 'Error',
+          description: 'You must be logged in to add subscriptions',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const response = await apiRequest("POST", '/api/subscriptions', {
+        ...formData,
+        userId: user.id,
+        nextBillingDate: formData.nextBillingDate.toISOString(),
+        status: 'active',
+        autoRenew: true,
       });
 
       if (!response.ok) throw new Error('Failed to create subscription');
@@ -137,11 +146,7 @@ export default function SubscriptionsPage({ embedded = false }: SubscriptionsPag
 
   const handleStatusChange = async (id: number, status: 'active' | 'paused' | 'cancelled') => {
     try {
-      const response = await fetch(`/api/subscriptions/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
+      const response = await apiRequest("PUT", `/api/subscriptions/${id}`, { status });
 
       if (!response.ok) throw new Error('Failed to update subscription');
 

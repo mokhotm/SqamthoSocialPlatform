@@ -6,7 +6,7 @@ const baseURL = API_CONFIG.BASE_URL;
 
 // Create axios instance with interceptors for debugging
 const axiosInstance = axios.create({
-  baseURL,
+  baseURL, // Use the baseURL from config
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',

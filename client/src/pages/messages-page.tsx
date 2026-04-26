@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { addMessageListener, sendWebSocketMessage } from "@/lib/websocket";
 import { format } from "date-fns";
+import { NewConversationDialog } from "@/components/conversations/new-conversation-dialog";
 
 interface Conversation {
   user: {
@@ -46,13 +47,15 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Get all conversations
-  const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
+  const { data: conversationsData, isLoading: conversationsLoading } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
+    enabled: !!currentUser,
   });
+  const conversations = conversationsData ?? [];
 
   // Get messages for selected conversation
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
-    queryKey: ["/api/messages", selectedUser],
+    queryKey: ["messages", selectedUser],
     enabled: !!selectedUser,
   });
 
@@ -219,10 +222,15 @@ export default function MessagesPage() {
               </div>
               
               <div className="p-4 border-t border-gray-200">
-                <Button variant="outline" className="w-full flex items-center justify-center">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Conversation
-                </Button>
+                <NewConversationDialog
+                  onConversationCreated={(userId) => setSelectedUser(userId)}
+                  trigger={
+                    <Button variant="outline" className="w-full flex items-center justify-center">
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Conversation
+                    </Button>
+                  }
+                />
               </div>
             </div>
             
@@ -360,10 +368,15 @@ export default function MessagesPage() {
                   <p className="text-gray-500 max-w-md">
                     Select a conversation from the sidebar or start a new one to begin messaging.
                   </p>
-                  <Button className="mt-6">
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Conversation
-                  </Button>
+                  <NewConversationDialog
+                    onConversationCreated={(userId) => setSelectedUser(userId)}
+                    trigger={
+                      <Button className="mt-6">
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Conversation
+                      </Button>
+                    }
+                  />
                 </div>
               )}
             </div>

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { X, Search, Plus } from "lucide-react";
+import { X, Search, Plus, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import Conversation from "./conversation";
 
 interface User {
@@ -29,11 +30,13 @@ export default function ChatOverlay() {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedConversation, setSelectedConversation] = useState<User | null>(null);
+  const { user } = useAuth();
   
-  const { data: conversations = [] } = useQuery<Conversation[]>({
+  const { data: conversationsData } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
-    // No need to specify the queryFn as it's set globally
+    enabled: !!user,
   });
+  const conversations = conversationsData ?? [];
   
   // Filter conversations based on search query
   const filteredConversations = conversations.filter(

@@ -1,3 +1,4 @@
+import { pool, db } from "./db.js";
 import {
   type User, type InsertUser,
   type Post, type InsertPost,
@@ -13,66 +14,26 @@ import {
   type HealthRecord, type InsertHealthRecord,
   type Subscription, type InsertSubscription,
   type UserSettings, type InsertUserSettings,
+  type SavedPost, type InsertSavedPost,
+  type MarketplaceItem, type InsertMarketplaceItem,
+  type Event, type InsertEvent,
   users, posts, comments, reactions, messages, stories, groups, groupMembers, groupMessages, friends,
   financialRecords, healthRecords, subscriptions, userSettings,
-  conversations, conversationParticipants
+  savedPosts, marketplaceItems, events, eventAttendees,
+  conversations, conversationParticipants,
+  insertUserSchema, insertPostSchema, insertCommentSchema, insertReactionSchema,
+  insertMessageSchema, insertStorySchema, insertGroupSchema, insertGroupMemberSchema,
+  insertGroupMessageSchema, insertFriendSchema, insertSubscriptionSchema,
+  insertSavedPostSchema, insertMarketplaceItemSchema, insertEventSchema
 } from "../shared/schema.js";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { drizzle } from 'drizzle-orm/node-postgres';
-import pg from 'pg';
-
-const { Pool } = pg;
+import { eq, and, or, sql, inArray, asc, desc, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { Pool } from 'pg';
+import { z } from 'zod';
 
 const MemoryStore = createMemoryStore(session);
-
-const databaseUrl = "postgresql://sqamtho:$qamth0%232025@localhost:5432/sqamthodb"; // URL-encoded '#' in password
-
-console.log('Initializing database connection with URL:', databaseUrl);
-
-const pool = new Pool({
-  connectionString: databaseUrl,
-});
-
-// Add error handler for the pool
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client:', err);
-});
-
-// Test database connection with detailed logging
-pool.connect()
-  .then(client => {
-    console.log('Successfully connected to PostgreSQL database');
-    
-    // Test query to verify database setup
-    return client
-      .query('SELECT current_database(), current_user, version()')
-      .then(result => {
-        console.log('Database connection details:', {
-          database: result.rows[0].current_database,
-          user: result.rows[0].current_user,
-          version: result.rows[0].version
-        });
-        client.release();
-      })
-      .catch(err => {
-        client.release();
-        throw err;
-      });
-  })
-  .catch((error) => {
-    console.error('Database connection error details:', {
-      error: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    process.exit(1); // Exit if we can't connect to the database
-  });
-
-const db = drizzle(pool);
-
-// modify the interface with any CRUD methods
-// you might need
 
 export interface IStorage {
   sessionStore: session.Store;
@@ -85,13 +46,16 @@ export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
   // Post methods
   createPost(post: InsertPost): Promise<Post>;
   getPosts(): Promise<Post[]>;
   getPostById(id: number): Promise<Post | undefined>;
-  getPostsByUserId(userId: number): Promise<Post[]>;
+  getPostsByUserId(userIds: number[]): Promise<Post[]>;
+  updatePost(id: number, data: { content?: string; imageUrl?: string | null }): Promise<Post>;
+  deletePost(id: number): Promise<void>;
   
   // Comment methods
   createComment(comment: InsertComment): Promise<Comment>;
@@ -118,23 +82,34 @@ export interface IStorage {
   
   // Story methods
   createStory(story: InsertStory): Promise<Story>;
-  getStoriesByUserId(userId: number): Promise<Story[]>;
-  getStoriesByFriends(userId: number): Promise<Story[]>;
+  getStoriesByUserId(userId: number): Promise<(Story & { user: User })[]>;
+  getStoriesByFriends(userId: number): Promise<(Story & { user: User })[]>;
   
   // Friend methods
   createFriendRequest(request: InsertFriend): Promise<Friend>;
   getFriendRequestByUsers(userId: number, friendId: number): Promise<Friend | undefined>;
   getFriendsByUserId(userId: number): Promise<Friend[]>;
+  getFriendsWithUsernamesByUserId(userId: number): Promise<{ id: number; username: string }[]>;
   updateFriendStatus(id: number, status: string): Promise<Friend>;
-  
+  updateFriendship(id: number, updates: Partial<InsertFriend>): Promise<Friend>;
+
+  // Post methods
+  getPostsByMention(condition: SQL<unknown>): Promise<Post[]>;
+
   // Group methods
   createGroup(group: InsertGroup): Promise<Group>;
   getGroupById(id: number): Promise<Group | undefined>;
   getGroups(): Promise<Group[]>;
+  getGroupsByUserId(userId: number): Promise<Group[]>;
+  updateGroup(id: number, group: Partial<InsertGroup>): Promise<Group>;
+  deleteGroup(id: number): Promise<void>;
   
   // Group member methods
   addGroupMember(member: InsertGroupMember): Promise<GroupMember>;
+  removeGroupMember(groupId: number, userId: number): Promise<void>;
   getGroupMembers(groupId: number): Promise<GroupMember[]>;
+  getGroupMembershipsByUserId(userId: number): Promise<GroupMember[]>;
+  getGroupMembershipByUser(userId: number, groupId: number): Promise<GroupMember | undefined>;
   
   // Group message methods
   createGroupMessage(message: InsertGroupMessage): Promise<GroupMessage>;
@@ -162,9 +137,28 @@ export interface IStorage {
   updateSubscription(id: number, subscription: Partial<InsertSubscription>): Promise<Subscription>;
   deleteSubscription(id: number): Promise<void>;
   getUpcomingRenewals(userId: number, daysAhead: number): Promise<Subscription[]>;
-}
 
-import { eq, asc, inArray } from "drizzle-orm";
+  // Saved Post methods
+  savePost(save: InsertSavedPost): Promise<SavedPost>;
+  getSavedPosts(userId: number): Promise<any[]>;
+  removeSavedPost(userId: number, postId: number): Promise<void>;
+
+  // Marketplace methods
+  createMarketplaceItem(item: InsertMarketplaceItem): Promise<MarketplaceItem>;
+  getMarketplaceItems(): Promise<any[]>;
+  getMarketplaceItemById(id: number): Promise<MarketplaceItem | undefined>;
+  deleteMarketplaceItem(id: number): Promise<void>;
+
+  // Event methods
+  createEvent(event: InsertEvent): Promise<Event>;
+  getEventById(id: number): Promise<Event | undefined>;
+  getEvents(): Promise<Event[]>;
+  getEventsByCreatorId(creatorId: number): Promise<Event[]>;
+
+  // Logic methods
+  getMemoriesOnThisDay(userId: number): Promise<Post[]>;
+  getExploreContent(userId: number): Promise<any[]>;
+}
 
 export class PgStorage implements IStorage {
   public sessionStore: session.Store = new MemoryStore({
@@ -173,9 +167,7 @@ export class PgStorage implements IStorage {
 
   async getUser(id: number): Promise<User | undefined> {
     try {
-      console.log('Querying database for user ID:', id);
       const result = await db.select().from(users).where(eq(users.id, id));
-      console.log('User query result:', result[0] ? 'Found' : 'Not found');
       return result[0];
     } catch (error) {
       console.error('Error getting user by ID:', error);
@@ -185,67 +177,94 @@ export class PgStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     try {
-      console.log('Querying database for username:', username);
-      
-      // Use raw query to handle both password and password_hash columns
-      const result = await pool.query(`
-        SELECT id, username, display_name, email, 
-               password_hash as password,
-               profile_picture, location
-        FROM users 
-        WHERE username = $1
-      `, [username]);
-      
-      console.log('Database result rows:', result.rows.length);
-      
-      if (result.rows.length === 0) {
-        return undefined;
-      }
-      
-      // Map database column names to User schema property names
-      const user = {
-        id: result.rows[0].id,
-        username: result.rows[0].username,
-        displayName: result.rows[0].display_name,
-        email: result.rows[0].email,
-        password: result.rows[0].password,
-        profilePicture: result.rows[0].profile_picture,
-        location: result.rows[0].location,
-        // createdAt: result.rows[0].created_at // Column removed from DB
-      };
-      
-      console.log('Mapped user object:', { 
-        id: user.id, 
-        username: user.username, 
-        hasPassword: !!user.password 
-      });
-      
-      return user as unknown as User;
-    } catch (error) {
-      console.error('Database error:', error);
-      throw error;
-    }
-  }
-
-  async createUser(user: InsertUser): Promise<User> {
-    try {
-      console.log('Creating new user:', { username: user.username });
-      const result = await db.insert(users).values(user).returning();
-      console.log('User created successfully:', { id: result[0]?.id });
+      const result = await db.select().from(users).where(eq(users.username, username));
       return result[0];
     } catch (error) {
-      console.error('Error creating user:', error);
+      console.error('Error getting user by username:', error);
       throw error;
     }
   }
 
-  async createPost(post: InsertPost): Promise<Post> {
-    const result = await db.insert(posts).values(post).returning();
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  }
+
+  // Updated createUser method
+  async createUser(user: InsertUser): Promise<User> {
+    const result = await db.insert(users).values({
+      username: user.username,
+      displayName: user.displayName,
+      email: user.email,
+      password_hash: user.password_hash,
+      bio: user.bio ?? null,
+      profilePicture: user.profilePicture ?? null,
+      location: user.location ?? null,
+      coverImage: user.coverImage ?? null,
+      gender: user.gender ?? null,
+      ethnicity: user.ethnicity ?? null,
+      dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth) : null,
+      createdAt: user.createdAt ?? new Date(),
+    }).returning();
+    return result[0];
+  }
+
+  async updateUser(userId: number, updates: Partial<z.infer<typeof insertUserSchema>>): Promise<User> {
+    try {
+      const updateData: Record<string, any> = {};
+      if (updates.displayName !== undefined) updateData.displayName = updates.displayName;
+      if (updates.bio !== undefined) updateData.bio = updates.bio;
+      if (updates.location !== undefined) updateData.location = updates.location;
+      if (updates.profilePicture !== undefined) updateData.profilePicture = updates.profilePicture;
+      if (updates.coverImage !== undefined) updateData.coverImage = updates.coverImage;
+      if (updates.gender !== undefined) updateData.gender = updates.gender;
+      if (updates.ethnicity !== undefined) updateData.ethnicity = updates.ethnicity;
+      
+      if (updates.dateOfBirth !== undefined) {
+        if (updates.dateOfBirth === null) {
+          updateData.dateOfBirth = null;
+        } else {
+          const dateObj = new Date(updates.dateOfBirth);
+          if (!isNaN(dateObj.getTime())) {
+            updateData.dateOfBirth = dateObj;
+          }
+        }
+      }
+      
+      if (Object.keys(updateData).length === 0) {
+        throw new Error('No valid fields to update');
+      }
+      
+      const result = await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning();
+      
+      if (result.length === 0) {
+        throw new Error('User not found');
+      }
+      
+      return result[0];
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  }
+
+  // Updated createPost method
+  async createPost(post: z.infer<typeof insertPostSchema>): Promise<Post> {
+    const result = await db.insert(posts).values({
+      userId: post.userId,
+      content: post.content,
+      imageUrl: post.imageUrl ?? null,
+    }).returning();
     return result[0];
   }
 
   async getPosts(): Promise<Post[]> {
-    return db.select().from(posts);
+    const result = await db.select().from(posts).orderBy(desc(posts.createdAt));
+    return result;
   }
 
   async getPostById(id: number): Promise<Post | undefined> {
@@ -253,12 +272,54 @@ export class PgStorage implements IStorage {
     return result[0];
   }
 
-  async getPostsByUserId(userId: number): Promise<Post[]> {
-    return db.select().from(posts).where(eq(posts.userId, userId));
+  async getPostsByUserId(userIds: number[]): Promise<Post[]> {
+    if (userIds.length === 0) {
+      return [];
+    }
+    return db.select().from(posts).where(inArray(posts.userId, userIds)).orderBy(desc(posts.createdAt));
   }
 
-  async createComment(comment: InsertComment): Promise<Comment> {
-    const result = await db.insert(comments).values(comment).returning();
+  async getPostsByMention(condition: SQLWrapper): Promise<Post[]> {
+    return db.select().from(posts).where(condition);
+  }
+
+  async updatePost(id: number, data: { content?: string; imageUrl?: string | null }): Promise<Post> {
+    const updateData: Record<string, any> = {};
+    if (data.content !== undefined) updateData.content = data.content;
+    if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;
+
+    if (Object.keys(updateData).length === 0) {
+      throw new Error('No valid fields to update');
+    }
+
+    const [updated] = await db
+      .update(posts)
+      .set(updateData)
+      .where(eq(posts.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error('Post not found');
+    }
+    return updated;
+  }
+
+  async deletePost(id: number): Promise<void> {
+    // Delete associated data first (comments, reactions, saved posts)
+    await db.delete(comments).where(eq(comments.postId, id));
+    await db.delete(reactions).where(eq(reactions.postId, id));
+    await db.delete(savedPosts).where(eq(savedPosts.postId, id));
+    // Delete the post itself
+    await db.delete(posts).where(eq(posts.id, id));
+  }
+
+  // Updated createComment method
+  async createComment(comment: z.infer<typeof insertCommentSchema>): Promise<Comment> {
+    const result = await db.insert(comments).values({
+      postId: comment.postId,
+      userId: comment.userId,
+      content: comment.content,
+    }).returning();
     return result[0];
   }
 
@@ -266,8 +327,13 @@ export class PgStorage implements IStorage {
     return db.select().from(comments).where(eq(comments.postId, postId));
   }
 
-  async createReaction(reaction: InsertReaction): Promise<Reaction> {
-    const result = await db.insert(reactions).values(reaction).returning();
+  // Updated createReaction method
+  async createReaction(reaction: z.infer<typeof insertReactionSchema>): Promise<Reaction> {
+    const result = await db.insert(reactions).values({
+      postId: reaction.postId,
+      userId: reaction.userId,
+      type: reaction.type,
+    }).returning();
     return result[0];
   }
 
@@ -289,9 +355,27 @@ export class PgStorage implements IStorage {
       .where(eq(reactions.userId, userId) && eq(reactions.postId, postId));
   }
 
-  async createMessage(message: InsertMessage): Promise<Message> {
-    const result = await db.insert(messages).values(message).returning();
-    return result[0];
+  async createMessage(messageData: {
+    conversationId: number;
+    userId: number;
+    senderId: number;
+    receiverId: number;
+    content: string;
+  }): Promise<Message> {
+    try {
+      const result = await db.insert(messages).values({
+        conversationId: messageData.conversationId,
+        userId: messageData.userId,
+        senderId: messageData.senderId,
+        receiverId: messageData.receiverId,
+        content: messageData.content,
+      }).returning();
+      
+      return result[0];
+    } catch (error) {
+      console.error('Error creating message:', error);
+      throw error;
+    }
   }
 
   async getMessagesBetweenUsers(userOneId: number, userTwoId: number): Promise<Message[]> {
@@ -348,22 +432,56 @@ export class PgStorage implements IStorage {
     return result[0];
   }
 
-  async getStoriesByUserId(userId: number): Promise<Story[]> {
-    return db.select().from(stories).where(eq(stories.userId, userId));
+  async getStoriesByUserId(userId: number): Promise<(Story & { user: User })[]> {
+    const results = await db
+      .select({
+        story: stories,
+        user: users,
+      })
+      .from(stories)
+      .where(and(eq(stories.userId, userId), sql`${stories.expiresAt} > NOW()`))
+      .innerJoin(users, eq(stories.userId, users.id));
+
+    return results.map(r => ({
+      ...r.story,
+      user: r.user
+    }));
   }
 
-  async getStoriesByFriends(userId: number): Promise<Story[]> {
-    // This is a simplified implementation and might need further optimization
+  async getStoriesByFriends(userId: number): Promise<(Story & { user: User })[]> {
     const friendships = await this.getFriendsByUserId(userId);
     const friendIds = friendships
       .filter((f) => f.status === "accepted")
       .map((f) => (f.userId === userId ? f.friendId : f.userId));
+    
+    const userIdsToFetch = [userId, ...friendIds];
 
-    return db.select().from(stories).where(eq(stories.userId, userId));
+    const results = await db
+      .select({
+        story: stories,
+        user: users,
+      })
+      .from(stories)
+      .where(and(
+        inArray(stories.userId, userIdsToFetch),
+        sql`${stories.expiresAt} > NOW()`
+      ))
+      .innerJoin(users, eq(stories.userId, users.id))
+      .orderBy(desc(stories.createdAt));
+
+    return results.map(r => ({
+      ...r.story,
+      user: r.user
+    }));
   }
 
-  async createFriendRequest(request: InsertFriend): Promise<Friend> {
-    const result = await db.insert(friends).values(request).returning();
+  // Updated createFriendRequest method
+  async createFriendRequest(request: z.infer<typeof insertFriendSchema>): Promise<Friend> {
+    const result = await db.insert(friends).values({
+      userId: request.userId,
+      friendId: request.friendId,
+      status: request.status,
+    }).returning();
     return result[0];
   }
 
@@ -371,12 +489,24 @@ export class PgStorage implements IStorage {
     const result = await db
       .select()
       .from(friends)
-      .where(eq(friends.userId, userId) && eq(friends.friendId, friendId));
+      .where(and(eq(friends.userId, userId), eq(friends.friendId, friendId)));
     return result[0];
   }
 
   async getFriendsByUserId(userId: number): Promise<Friend[]> {
-    return db.select().from(friends).where(eq(friends.userId, userId) || eq(friends.friendId, userId));
+    return db.select().from(friends).where(or(eq(friends.userId, userId), eq(friends.friendId, userId)));
+  }
+
+  async getFriendsWithUsernamesByUserId(userId: number): Promise<{ id: number; username: string }[]> {
+    const friendRelationships = await db.select().from(friends).where(or(eq(friends.userId, userId), eq(friends.friendId, userId)));
+    const friendIds = friendRelationships.map(friendship => friendship.userId === userId ? friendship.friendId : friendship.userId);
+
+    if (friendIds.length === 0) {
+      return [];
+    }
+
+    const friendUsers = await db.select({ id: users.id, username: users.username }).from(users).where(inArray(users.id, friendIds));
+    return friendUsers;
   }
 
   async updateFriendStatus(id: number, status: string): Promise<Friend> {
@@ -388,27 +518,180 @@ export class PgStorage implements IStorage {
     return result[0];
   }
 
-  async createGroup(group: InsertGroup): Promise<Group> {
-    const result = await db.insert(groups).values(group).returning();
+  async updateFriendship(id: number, updates: Partial<InsertFriend>): Promise<Friend> {
+    const result = await db
+      .update(friends)
+      .set(updates)
+      .where(eq(friends.id, id))
+      .returning();
     return result[0];
+  }
+
+  // Updated createGroup method
+  async createGroup(group: InsertGroup): Promise<Group> {
+    try {
+      const result = await db.insert(groups).values({
+        name: group.name,
+        description: group.description ?? null,
+        imageUrl: group.imageUrl ?? null,
+      }).returning();
+      return result[0];
+    } catch (error) {
+      console.error('Error creating group:', error);
+      throw error;
+    }
   }
 
   async getGroupById(id: number): Promise<Group | undefined> {
-    const result = await db.select().from(groups).where(eq(groups.id, id));
-    return result[0];
+    try {
+      const result = await db.select().from(groups).where(eq(groups.id, id));
+      return result[0];
+    } catch (error) {
+      console.error('Error getting group by ID:', error);
+      throw error;
+    }
   }
 
   async getGroups(): Promise<Group[]> {
-    return db.select().from(groups);
+    try {
+      return await db.select().from(groups);
+    } catch (error) {
+      console.error('Error getting all groups:', error);
+      throw error;
+    }
   }
 
+  async getGroupsByUserId(userId: number): Promise<Group[]> {
+    try {
+      const results = await db
+        .select({
+          group: groups,
+        })
+        .from(groupMembers)
+        .where(eq(groupMembers.userId, userId))
+        .innerJoin(groups, eq(groupMembers.groupId, groups.id));
+      
+      return results.map(r => r.group);
+    } catch (error) {
+      console.error('Error getting groups for user:', error);
+      throw error;
+    }
+  }
+
+  async updateGroup(id: number, data: Partial<InsertGroup>): Promise<Group> {
+    try {
+      const updateData: Record<string, any> = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.description !== undefined) updateData.description = data.description;
+      if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;
+
+      if (Object.keys(updateData).length === 0) {
+        throw new Error('No valid fields to update');
+      }
+
+      const [updated] = await db
+        .update(groups)
+        .set(updateData)
+        .where(eq(groups.id, id))
+        .returning();
+
+      if (!updated) {
+        throw new Error('Group not found');
+      }
+      return updated;
+    } catch (error) {
+      console.error('Error updating group:', error);
+      throw error;
+    }
+  }
+
+  async deleteGroup(id: number): Promise<void> {
+    try {
+      // Delete associated data first
+      await db.delete(groupMessages).where(eq(groupMessages.groupId, id));
+      await db.delete(groupMembers).where(eq(groupMembers.groupId, id));
+      // Delete the group itself
+      await db.delete(groups).where(eq(groups.id, id));
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      throw error;
+    }
+  }
+
+  // Updated addGroupMember method
   async addGroupMember(member: InsertGroupMember): Promise<GroupMember> {
-    const result = await db.insert(groupMembers).values(member).returning();
-    return result[0];
+    try {
+      // Start a transaction to update member count safely
+      const result = await db.transaction(async (tx) => {
+        const [newMember] = await tx.insert(groupMembers).values({
+          groupId: member.groupId,
+          userId: member.userId,
+          role: member.role,
+        }).returning();
+
+        // Increment member count
+        await tx.update(groups)
+          .set({ memberCount: sql`${groups.memberCount} + 1` })
+          .where(eq(groups.id, member.groupId));
+
+        return newMember;
+      });
+      return result;
+    } catch (error) {
+      console.error('Error adding group member:', error);
+      throw error;
+    }
+  }
+
+  async removeGroupMember(groupId: number, userId: number): Promise<void> {
+    try {
+      await db.transaction(async (tx) => {
+        const result = await tx.delete(groupMembers)
+          .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId)))
+          .returning();
+
+        if (result.length > 0) {
+          // Decrement member count
+          await tx.update(groups)
+            .set({ memberCount: sql`${groups.memberCount} - 1` })
+            .where(eq(groups.id, groupId));
+        }
+      });
+    } catch (error) {
+      console.error('Error removing group member:', error);
+      throw error;
+    }
   }
 
   async getGroupMembers(groupId: number): Promise<GroupMember[]> {
-    return db.select().from(groupMembers).where(eq(groupMembers.groupId, groupId));
+    try {
+      return await db.select().from(groupMembers).where(eq(groupMembers.groupId, groupId));
+    } catch (error) {
+      console.error('Error getting group members:', error);
+      throw error;
+    }
+  }
+
+  async getGroupMembershipsByUserId(userId: number): Promise<GroupMember[]> {
+    try {
+      return await db.select().from(groupMembers).where(eq(groupMembers.userId, userId));
+    } catch (error) {
+      console.error('Error getting memberships for user:', error);
+      throw error;
+    }
+  }
+
+  async getGroupMembershipByUser(userId: number, groupId: number): Promise<GroupMember | undefined> {
+    try {
+      const result = await db
+        .select()
+        .from(groupMembers)
+        .where(and(eq(groupMembers.userId, userId), eq(groupMembers.groupId, groupId)));
+      return result[0];
+    } catch (error) {
+      console.error('Error getting group membership for user:', error);
+      throw error;
+    }
   }
 
   async createGroupMessage(message: InsertGroupMessage): Promise<GroupMessage> {
@@ -476,20 +759,28 @@ export class PgStorage implements IStorage {
   }
 
   // Financial record methods
-  // Financial record methods
   async createFinancialRecord(record: InsertFinancialRecord): Promise<FinancialRecord> {
-    const [newRecord] = await db.insert(financialRecords).values(record).returning();
+    // Validate required fields
+    const validatedRecord = {
+      userId: record.userId,
+      title: record.title,
+      category: record.category,
+      amount: record.amount,
+      date: record.date,
+      description: record.description || null,
+    };
+    const [newRecord] = await db.insert(financialRecords).values(validatedRecord).returning();
     return newRecord;
   }
 
   async getFinancialRecords(userId: number): Promise<FinancialRecord[]> {
-    const records = await db.select().from(financialRecords);
-return records.filter(record => record.userId === userId);
+    return await db.select().from(financialRecords).where(eq(financialRecords.userId, userId));
   }
-
+  
   async getFinancialRecordsByCategory(userId: number, category: string): Promise<FinancialRecord[]> {
-    const records = await db.select().from(financialRecords);
-return records.filter(record => record.userId === userId && record.category === category);
+    return await db.select()
+      .from(financialRecords)
+      .where(and(eq(financialRecords.userId, userId), eq(financialRecords.category, category)));
   }
 
   async updateFinancialRecord(id: number, record: Partial<InsertFinancialRecord>): Promise<FinancialRecord> {
@@ -506,18 +797,28 @@ return records.filter(record => record.userId === userId && record.category === 
 
   // Health record methods
   async createHealthRecord(record: InsertHealthRecord): Promise<HealthRecord> {
-    const [newRecord] = await db.insert(healthRecords).values(record).returning();
+    // Validate required fields
+    const validatedRecord = {
+      userId: record.userId,
+      type: record.type,
+      title: record.title,
+      date: record.date,
+      description: record.description || null,
+      value: record.value || null,
+      unit: record.unit || null,
+    };
+    const [newRecord] = await db.insert(healthRecords).values(validatedRecord).returning();
     return newRecord;
   }
 
   async getHealthRecords(userId: number): Promise<HealthRecord[]> {
-    const records = await db.select().from(healthRecords);
-return records.filter(record => record.userId === userId);
+    return await db.select().from(healthRecords).where(eq(healthRecords.userId, userId));
   }
-
+  
   async getHealthRecordsByType(userId: number, type: string): Promise<HealthRecord[]> {
-    const records = await db.select().from(healthRecords);
-return records.filter(record => record.userId === userId && record.type === type);
+    return await db.select()
+      .from(healthRecords)
+      .where(and(eq(healthRecords.userId, userId), eq(healthRecords.type, type)));
   }
 
   async updateHealthRecord(id: number, record: Partial<InsertHealthRecord>): Promise<HealthRecord> {
@@ -534,23 +835,39 @@ return records.filter(record => record.userId === userId && record.type === type
 
   // Subscription methods
   async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
-    const [newSubscription] = await db.insert(subscriptions).values(subscription).returning();
+    // Validate required fields
+    const validatedSubscription = {
+      userId: subscription.userId,
+      name: subscription.name,
+      amount: subscription.amount,
+      billingCycle: subscription.billingCycle,
+      nextBillingDate: subscription.nextBillingDate,
+      category: subscription.category,
+      provider: subscription.provider,
+      description: subscription.description || null,
+      currency: subscription.currency || 'USD',
+      status: subscription.status || 'active',
+      autoRenew: subscription.autoRenew || true,
+      reminderDays: subscription.reminderDays || 3,
+    };
+    const [newSubscription] = await db.insert(subscriptions).values(validatedSubscription).returning();
     return newSubscription;
   }
 
   async getSubscriptions(userId: number): Promise<Subscription[]> {
-    const records = await db.select().from(subscriptions);
-    return records.filter(record => record.userId === userId);
+    return await db.select().from(subscriptions).where(eq(subscriptions.userId, userId));
   }
-
+  
   async getSubscriptionsByCategory(userId: number, category: string): Promise<Subscription[]> {
-    const records = await db.select().from(subscriptions);
-    return records.filter(record => record.userId === userId && record.category === category);
+    return await db.select()
+      .from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.category, category)));
   }
-
+  
   async getActiveSubscriptions(userId: number): Promise<Subscription[]> {
-    const records = await db.select().from(subscriptions);
-    return records.filter(record => record.userId === userId && record.status === 'active');
+    return await db.select()
+      .from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')));
   }
 
   async updateSubscription(id: number, subscription: Partial<InsertSubscription>): Promise<Subscription> {
@@ -559,6 +876,25 @@ return records.filter(record => record.userId === userId && record.type === type
       .where(eq(subscriptions.id, id))
       .returning();
     return updatedSubscription;
+  }
+
+  async deleteSubscription(id: number): Promise<void> {
+    await db.delete(subscriptions).where(eq(subscriptions.id, id));
+  }
+
+  async getUpcomingRenewals(userId: number, daysAhead: number): Promise<Subscription[]> {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    
+    return await db.select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.userId, userId),
+          eq(subscriptions.status, 'active'),
+          sql`${subscriptions.nextBillingDate} <= ${futureDate}`
+        )
+      );
   }
 
   // User Settings methods
@@ -575,29 +911,134 @@ return records.filter(record => record.userId === userId && record.type === type
   async updateUserSettings(userId: number, settings: Partial<InsertUserSettings>): Promise<UserSettings> {
     const result = await db
       .update(userSettings)
-      .set({
-        ...settings,
-        updatedAt: new Date(),
-      })
+      .set(settings)
       .where(eq(userSettings.userId, userId))
       .returning();
     return result[0];
   }
 
-  async deleteSubscription(id: number): Promise<void> {
-    await db.delete(subscriptions).where(eq(subscriptions.id, id));
+  // Saved Post methods
+  async savePost(save: InsertSavedPost): Promise<SavedPost> {
+    const [result] = await db.insert(savedPosts).values(save).returning();
+    return result;
   }
 
-  async getUpcomingRenewals(userId: number, daysAhead: number): Promise<Subscription[]> {
-    const records = await db.select().from(subscriptions);
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + daysAhead);
-    
-    return records.filter(record => 
-      record.userId === userId && 
-      record.status === 'active' &&
-      record.nextBillingDate <= futureDate
+  async getSavedPosts(userId: number): Promise<any[]> {
+    const results = await db
+      .select({
+        savedPost: savedPosts,
+        post: posts,
+        author: users,
+      })
+      .from(savedPosts)
+      .where(eq(savedPosts.userId, userId))
+      .innerJoin(posts, eq(savedPosts.postId, posts.id))
+      .innerJoin(users, eq(posts.userId, users.id));
+
+    return results.map(r => ({
+      ...r.savedPost,
+      post: {
+        ...r.post,
+        author: {
+          name: r.author.displayName || r.author.username,
+          username: r.author.username,
+          avatar: r.author.profilePicture
+        }
+      }
+    }));
+  }
+
+  async removeSavedPost(userId: number, postId: number): Promise<void> {
+    await db.delete(savedPosts).where(and(eq(savedPosts.userId, userId), eq(savedPosts.postId, postId)));
+  }
+
+  // Marketplace methods
+  async createMarketplaceItem(item: InsertMarketplaceItem): Promise<MarketplaceItem> {
+    const [result] = await db.insert(marketplaceItems).values(item).returning();
+    return result;
+  }
+
+  async getMarketplaceItems(): Promise<any[]> {
+    const results = await db
+      .select({
+        item: marketplaceItems,
+        seller: users,
+      })
+      .from(marketplaceItems)
+      .innerJoin(users, eq(marketplaceItems.userId, users.id))
+      .orderBy(asc(marketplaceItems.createdAt));
+
+    return results.map(r => ({
+      ...r.item,
+      seller: {
+        name: r.seller.displayName || r.seller.username,
+        username: r.seller.username,
+        avatar: r.seller.profilePicture
+      }
+    }));
+  }
+
+  async getMarketplaceItemById(id: number): Promise<MarketplaceItem | undefined> {
+    const [result] = await db.select().from(marketplaceItems).where(eq(marketplaceItems.id, id));
+    return result;
+  }
+
+  async deleteMarketplaceItem(id: number): Promise<void> {
+    await db.delete(marketplaceItems).where(eq(marketplaceItems.id, id));
+  }
+
+  // Event methods
+  async createEvent(event: InsertEvent): Promise<Event> {
+    const [result] = await db.insert(events).values(event).returning();
+    return result;
+  }
+
+  async getEventById(id: number): Promise<Event | undefined> {
+    const [result] = await db.select().from(events).where(eq(events.id, id));
+    return result;
+  }
+
+  async getEvents(): Promise<Event[]> {
+    return db.select().from(events).orderBy(asc(events.startDate));
+  }
+
+  async getEventsByCreatorId(creatorId: number): Promise<Event[]> {
+    return db.select().from(events).where(eq(events.creatorId, creatorId));
+  }
+
+  // Logic methods
+  async getMemoriesOnThisDay(userId: number): Promise<Post[]> {
+    const today = new Date();
+    const res = await db.select().from(posts).where(
+      and(
+        eq(posts.userId, userId),
+        sql`EXTRACT(MONTH FROM ${posts.createdAt}) = ${today.getMonth() + 1}`,
+        sql`EXTRACT(DAY FROM ${posts.createdAt}) = ${today.getDate()}`,
+        sql`EXTRACT(YEAR FROM ${posts.createdAt}) < ${today.getFullYear()}`
+      )
     );
+    return res;
+  }
+
+  async getExploreContent(_userId: number): Promise<any[]> {
+    const results = await db
+      .select({
+        post: posts,
+        author: users,
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.userId, users.id))
+      .limit(20)
+      .orderBy(asc(posts.createdAt));
+
+    return results.map(r => ({
+      ...r.post,
+      author: {
+        displayName: r.author.displayName,
+        username: r.author.username,
+        profilePicture: r.author.profilePicture
+      }
+    }));
   }
 }
 

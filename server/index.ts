@@ -1,89 +1,78 @@
 import express from "express";
+import path from "path"; // Import path module
+import { fileURLToPath } from "url"; // For ES module __dirname equivalent
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
-import { setupVite, serveStatic, log } from "./vite.js";
+import { setupVite, serveStatic, log } from "./viteSetup.js";
 import cors from "cors";
-import session from "express-session";
 import { storage } from "./storage.js";
 
 const app = express();
 
-// Log all incoming requests
-app.use((req, res, next) => {
-  console.log(`Incoming request: ${req.method} ${req.path}`); // Added log
-  next();
-});
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Configure session middleware first
-app.use(session({
-  secret: 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+// Serve static files from the 'uploads' directory
+// Match the path used in routes.ts for file uploads
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+console.log(
+  "Serving static files from:",
+  path.join(__dirname, "..", "uploads")
+);
 
-// Configure CORS to allow requests from any origin in development mode
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow any origin in development mode
-    callback(null, true);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Configure CORS to allow requests from Vite dev server
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "http://localhost:5000",
+      "http://127.0.0.1:5000",
+      "http://127.0.0.1:56865",
+      "http://127.0.0.1:53375",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+    ],
+    exposedHeaders: ["Set-Cookie"],
+  })
+);
+
+// Enable pre-flight requests
+app.options("*", cors());
+
+console.log("CORS configured for development servers at ports 5173");
 
 // Increase JSON body size limit to 10MB to accommodate image uploads
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
-// Enhanced request logger middleware
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+// Import and use authentication debugging middleware
+import { authDebugMiddleware } from "./auth-debug.js";
+app.use(authDebugMiddleware);
+console.log("Authentication debugging middleware enabled");
 
-  console.log(`Request received: ${req.method} ${path}`);
-  
-  if (req.headers['content-type'] === 'application/json' && req.method !== 'GET') {
-    console.log(`Request body: ${JSON.stringify(req.body)}`);
-  }
-  
-  // Intercept json responses to log them
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+import { setupTelegramBot } from "./telegram.js";
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    const statusCode = res.statusCode;
-    const statusColor = statusCode >= 400 ? 'ERROR' : 'OK';
-    
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${statusCode} (${statusColor}) in ${duration}ms`;
-      
-      if (capturedJsonResponse) {
-        let responseStr = JSON.stringify(capturedJsonResponse);
-        // Truncate long responses
-        if (responseStr.length > 80) {
-          responseStr = responseStr.slice(0, 79) + "…";
-        }
-        logLine += ` :: ${responseStr}`;
-      }
+// Explicitly disable proxy for Telegram bot to avoid SSL issues in some environments
+// process.env.HTTPS_PROXY = "";
+// process.env.HTTP_PROXY = "";
+// process.env.https_proxy = "";
+// process.env.http_proxy = "";
 
-      log(logLine);
-    }
-  });
-
-  next();
-});
+try {
+  setupTelegramBot("8774402177:AAF6D3vphfFiTlEibGeaQRUQhe8MK0JRhSs"); // Initialize Telegram integration
+  console.log("Telegram bot setup call completed");
+} catch (error) {
+  console.error("Failed to start Telegram bot:", error);
+}
 
 (async () => {
   const server = await registerRoutes(app);
@@ -111,15 +100,16 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
   });
 
-
-
-  // Use port 8000 for the API server
+  // Use port 8000 for the API server to match client proxy configuration
   const port = 8000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    // reusePort: true, // ENOTSUP error on some systems
-  }, () => {
-    log(`serving on port ${port}`);
-  });
+  server.listen(
+    {
+      port,
+      host: "0.0.0.0",
+      // reusePort: true, // ENOTSUP error on some systems
+    },
+    () => {
+      log(`serving on port ${port}`);
+    }
+  );
 })();

@@ -9,6 +9,10 @@
     "strict": false,
     "noImplicitAny": false,
     "baseUrl": ".",
+    "typeRoots": [
+      "./node_modules/@types",
+      "./types"
+    ],
     "paths": {
       "@/*": ["./*"],
       "@shared/*": ["../shared/*"]

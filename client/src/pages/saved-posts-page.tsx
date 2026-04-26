@@ -3,7 +3,7 @@ import Layout from "@/components/layout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Bookmark, MoreVertical, Heart, MessageCircle, Share2 } from "lucide-react";
+import { Search, Filter, Bookmark, MoreVertical, Heart, MessageCircle, Share2, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -12,52 +12,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// Mock data - would come from API in real app
-const SAVED_POSTS = [
-  {
-    id: '1',
-    author: {
-      name: 'Thabo Mbeki',
-      username: 'thabom',
-      avatar: null,
-    },
-    content: 'Just visited the most amazing restaurant in Johannesburg! The fusion of traditional South African cuisine with modern techniques was mind-blowing. 🍽️ #SouthAfricanCuisine #Foodie',
-    image: null,
-    likes: 245,
-    comments: 42,
-    savedAt: '2025-04-25T14:30:00Z',
-    collection: 'Restaurants'
-  },
-  {
-    id: '2',
-    author: {
-      name: 'Cape Town Photography',
-      username: 'capetownphotos',
-      avatar: null,
-    },
-    content: 'Table Mountain at sunset never disappoints. The way the clouds roll over the top creating the famous "tablecloth" effect is simply magical. 📸 #CapeTown #Photography',
-    image: null,
-    likes: 789,
-    comments: 56,
-    savedAt: '2025-04-24T18:15:00Z',
-    collection: 'Places to Visit'
-  },
-  {
-    id: '3',
-    author: {
-      name: 'SA Tech Hub',
-      username: 'satechhub',
-      avatar: null,
-    },
-    content: 'Exciting developments in South Africa\'s tech scene! Our startup ecosystem is growing faster than ever. Here are the top 5 startups to watch in 2025... 🚀 #TechStartups #Innovation',
-    image: null,
-    likes: 567,
-    comments: 89,
-    savedAt: '2025-04-23T09:45:00Z',
-    collection: 'Tech News'
-  }
-];
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { getQueryFn, queryClient } from "@/lib/queryClient";
+import { SavedPost, Post } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
 const COLLECTIONS = [
   'All Posts',
@@ -68,7 +26,27 @@ const COLLECTIONS = [
   'Videos'
 ];
 
-function SavedPostCard({ post }: { post: any }) {
+function SavedPostCard({ savedPost }: { savedPost: any }) {
+  // In a real app, the savedPost would include the actual post details
+  // For now, we'll assume the API returns the post object or we fetch it
+  const post = savedPost.post || {
+    id: savedPost.postId,
+    author: { name: 'User', username: 'user', avatar: null },
+    content: 'Post content loading...',
+    likes: 0,
+    comments: 0,
+    createdAt: savedPost.createdAt
+  };
+
+  const removeMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest('DELETE', `/api/saved-posts/${post.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/saved-posts"] });
+    }
+  });
+
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between">
@@ -86,7 +64,7 @@ function SavedPostCard({ post }: { post: any }) {
         </div>
         <div className="flex items-center space-x-2">
           <p className="text-sm text-gray-500">
-            Saved to: {post.collection}
+            Saved to: {savedPost.collectionName || 'All Posts'}
           </p>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -98,7 +76,12 @@ function SavedPostCard({ post }: { post: any }) {
               <DropdownMenuItem>
                 Move to Collection
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">
+              <DropdownMenuItem 
+                className="text-destructive"
+                onClick={() => removeMutation.mutate()}
+                disabled={removeMutation.isPending}
+              >
+                {removeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Remove from Saved
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -130,7 +113,7 @@ function SavedPostCard({ post }: { post: any }) {
           </Button>
         </div>
         <p className="text-sm text-gray-500">
-          Saved {new Date(post.savedAt).toLocaleDateString()}
+          Saved {new Date(savedPost.createdAt).toLocaleDateString()}
         </p>
       </div>
     </Card>
@@ -140,6 +123,10 @@ function SavedPostCard({ post }: { post: any }) {
 export default function SavedPostsPage() {
   const { user } = useAuth();
 
+  const { data: savedPosts = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/saved-posts"],
+    queryFn: getQueryFn({ on401: "returnNull" })
+  });
 
   return (
     <Layout>
@@ -172,36 +159,54 @@ export default function SavedPostsPage() {
               </div>
             </Card>
 
-            <Tabs defaultValue="all" className="space-y-6">
-              <TabsList className="flex flex-wrap gap-2">
-                {COLLECTIONS.map((collection) => (
-                  <TabsTrigger key={collection} value={collection.toLowerCase().replace(/\s+/g, '-')}>
-                    {collection}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <Tabs defaultValue="all" className="space-y-6">
+                <TabsList className="flex flex-wrap gap-2">
+                  {COLLECTIONS.map((collection) => (
+                    <TabsTrigger key={collection} value={collection.toLowerCase().replace(/\s+/g, '-')}>
+                      {collection}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-              <TabsContent value="all" className="space-y-4">
-                {SAVED_POSTS.map(post => (
-                  <SavedPostCard key={post.id} post={post} />
-                ))}
-              </TabsContent>
-
-              {COLLECTIONS.slice(1).map((collection) => (
-                <TabsContent 
-                  key={collection} 
-                  value={collection.toLowerCase().replace(/\s+/g, '-')}
-                  className="space-y-4"
-                >
-                  {SAVED_POSTS
-                    .filter(post => post.collection === collection)
-                    .map(post => (
-                      <SavedPostCard key={post.id} post={post} />
+                <TabsContent value="all" className="space-y-4">
+                  {savedPosts.length > 0 ? (
+                    savedPosts.map(saved => (
+                      <SavedPostCard key={saved.id} savedPost={saved} />
                     ))
-                  }
+                  ) : (
+                    <div className="text-center py-12">
+                      <Bookmark className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500">No saved posts yet.</p>
+                    </div>
+                  )}
                 </TabsContent>
-              ))}
-            </Tabs>
+
+                {COLLECTIONS.slice(1).map((collection) => (
+                  <TabsContent 
+                    key={collection} 
+                    value={collection.toLowerCase().replace(/\s+/g, '-')}
+                    className="space-y-4"
+                  >
+                    {savedPosts
+                      .filter(saved => saved.collectionName === collection)
+                      .map(saved => (
+                        <SavedPostCard key={saved.id} savedPost={saved} />
+                      ))
+                    }
+                    {savedPosts.filter(saved => saved.collectionName === collection).length === 0 && (
+                      <div className="text-center py-12 text-gray-500">
+                        No posts in this collection.
+                      </div>
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
           </div>
     </Layout>
   );

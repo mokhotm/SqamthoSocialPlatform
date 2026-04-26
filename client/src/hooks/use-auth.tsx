@@ -4,9 +4,9 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import { LoginUserInput, RegisterUserInput, User } from "../../shared/schema";
+import { LoginUserInput, RegisterUserInput, User } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { API_CONFIG } from "@/lib/config";
 import { setupWebSocket, closeWebSocket } from "@/lib/websocket";
 
@@ -17,12 +17,15 @@ type AuthContextType = {
   loginMutation: UseMutationResult<User, Error, LoginUserInput>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<User, Error, RegisterUserInput>;
+  refreshUser: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Using the imported toast function directly
+  const localQueryClient = queryClient; // Use the imported queryClient
+
   const {
     data: user,
     error,
@@ -31,20 +34,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: [API_CONFIG.ENDPOINTS.USER],
     queryFn: async () => {
       try {
-        const response = await fetch(API_CONFIG.getFullUrl(API_CONFIG.ENDPOINTS.USER), {
-          credentials: 'include'
-        });
-        
+        const response = await fetch(
+          API_CONFIG.getFullUrl(API_CONFIG.ENDPOINTS.USER),
+          {
+            credentials: "include",
+          }
+        );
+
         if (!response.ok) {
           if (response.status === 401) {
             return null;
           }
-          throw new Error('Failed to fetch user data');
+          throw new Error("Failed to fetch user data");
         }
-        
+
         return await response.json();
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error("Error fetching user data:", error);
         return null;
       }
     },
@@ -59,87 +65,111 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         // Small delay to ensure proper cleanup of previous connection
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
         if (!mounted) return;
 
-        console.log('Auth detected active user, setting up WebSocket for user ID:', user.id);
+        console.log(
+          "Auth detected active user, setting up WebSocket for user ID:",
+          user.id
+        );
         setupWebSocket(user.id);
       } else {
-        console.log('No authenticated user detected, closing WebSocket connection');
+        console.log(
+          "No authenticated user detected, closing WebSocket connection"
+        );
         closeWebSocket();
       }
     };
 
     initializeWebSocket();
-    
+
     return () => {
       mounted = false;
-      console.log('AuthProvider unmounting, cleaning up WebSocket');
+      console.log("AuthProvider unmounting, cleaning up WebSocket");
       closeWebSocket();
     };
   }, [user?.id]);
 
+  const refreshUser = async () => {
+    console.log("Refreshing user data...");
+    await localQueryClient.invalidateQueries({
+      queryKey: [API_CONFIG.ENDPOINTS.USER],
+    });
+    // Optionally, you could wait for the refetch to complete if needed, but invalidateQueries is often enough.
+    // await localQueryClient.refetchQueries({ queryKey: [API_CONFIG.ENDPOINTS.USER] });
+    console.log("User data refresh triggered.");
+  };
+
   const loginMutation = useMutation<User, Error, LoginUserInput>({
     mutationFn: async (credentials: LoginUserInput) => {
-      console.log('Attempting login with credentials:', { username: credentials.username });
+      console.log("Attempting login with credentials:", {
+        username: credentials.username,
+      });
       try {
         // Use centralized config for login endpoint
         const loginUrl = API_CONFIG.getFullUrl(API_CONFIG.ENDPOINTS.LOGIN);
         console.log(`Making login request to: ${loginUrl}`);
-        
+
         const res = await fetch(loginUrl, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
           },
           body: JSON.stringify(credentials),
-          credentials: 'include'
+          credentials: "include",
         });
-        
-        console.log('Received login response:', {
+
+        console.log("Received login response:", {
           status: res.status,
           statusText: res.statusText,
           headers: Object.fromEntries(res.headers.entries()),
-          url: res.url
+          url: res.url,
         });
 
         // Always try to parse the response body, whether it's an error or success
-        const data = await res.json().catch(e => {
-          console.error('Error parsing response body:', e);
+        const data = await res.json().catch((e) => {
+          console.error("Error parsing response body:", e);
           return null;
         });
-        
-        console.log('Response body:', data);
+
+        console.log("Response body:", data);
 
         if (!res.ok) {
-          const errorMessage = data?.message || res.statusText || 'Login failed';
-          console.error('Login failed:', {
+          const errorMessage =
+            data?.message || res.statusText || "Login failed";
+          console.error("Login failed:", {
             status: res.status,
             message: errorMessage,
-            data
+            data,
           });
           throw new Error(errorMessage);
         }
 
         if (!data) {
-          throw new Error('No data received from server');
+          throw new Error("No data received from server");
         }
 
-        console.log('Login successful, user data:', data);
+        console.log("Login successful, user data:", data);
         return data;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Login failed due to an unknown error';
-        console.error('Login error details:', {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Login failed due to an unknown error";
+        console.error("Login error details:", {
           error,
           message: errorMessage,
-          stack: error instanceof Error ? error.stack : undefined
+          stack: error instanceof Error ? error.stack : undefined,
         });
         throw new Error(errorMessage);
       }
     },
-    onSuccess: (user: SelectUser) => {
-      console.log('Login successful for user:', user.username);
+    onSuccess: (user: User) => {
+      console.log("Login successful for user:", user.username);
+      // Clear the entire query cache to prevent data leakage from previous user sessions
+      queryClient.clear();
+      // Set the user data in the cache for the auth hook
       queryClient.setQueryData(["/api/user"], user);
       setupWebSocket(user.id);
       toast({
@@ -149,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     onError: (error: Error) => {
       // Error is guaranteed to be an Error object now
-      console.error('Login mutation onError:', error);
+      console.error("Login mutation onError:", error);
       toast({
         title: "Login failed",
         description: error.message || "Invalid username or password", // Fallback just in case
@@ -162,30 +192,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mutationFn: async (userData: RegisterUserInput) => {
       const { confirmPassword, ...userDataWithoutConfirm } = userData;
       try {
-        const res = await apiRequest("POST", "/api/register", userDataWithoutConfirm);
+        const res = await apiRequest(
+          "POST",
+          "/api/register",
+          userDataWithoutConfirm
+        );
         return await res.json();
       } catch (error) {
-        console.error('Caught error during registration API call:', error);
+        console.error("Caught error during registration API call:", error);
         // Ensure we always throw an Error object with a message
         if (error instanceof Error) {
           throw error;
-        } else if (typeof error === 'object' && error !== null && 'message' in error) {
-          throw new Error(String(error.message) || 'Registration failed due to unknown error');
+        } else if (
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error
+        ) {
+          throw new Error(
+            String(error.message) || "Registration failed due to unknown error"
+          );
         } else {
-          throw new Error('Registration failed due to an unknown error');
+          throw new Error("Registration failed due to an unknown error");
         }
       }
     },
-    onSuccess: (user: SelectUser) => {
+    onSuccess: (user: User) => {
+      // Clear the entire query cache to prevent data leakage from previous user sessions
+      queryClient.clear();
       queryClient.setQueryData(["/api/user"], user);
       setupWebSocket(user.id);
       toast({
         title: "Registration successful",
-        description: `Welcome to Sqamtho, ${user.displayName || user.username}!`,
+        description: `Welcome to Sqamtho, ${
+          user.displayName || user.username
+        }!`,
       });
     },
     onError: (error: Error) => {
-      console.error('Registration error:', error);
+      console.error("Registration error:", error);
       toast({
         title: "Registration failed",
         description: error.message || "An error occurred during registration.",
@@ -196,29 +240,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
-      console.log('Attempting logout');
+      console.log("Attempting logout");
       try {
         await apiRequest("POST", "/api/logout");
       } catch (error) {
-        console.error('Caught error during logout API call:', error);
+        console.error("Caught error during logout API call:", error);
         // Ensure we always throw an Error object with a message
         if (error instanceof Error) {
           throw error;
-        } else if (typeof error === 'object' && error !== null && 'message' in error) {
-          throw new Error(String(error.message) || 'Logout failed due to unknown error');
+        } else if (
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error
+        ) {
+          throw new Error(
+            String(error.message) || "Logout failed due to unknown error"
+          );
         } else {
-          throw new Error('Logout failed due to an unknown error');
+          throw new Error("Logout failed due to an unknown error");
         }
       }
     },
     onSuccess: () => {
-      console.log('Logout successful');
+      console.log("Logout successful");
+      // Clear the entire query cache to prevent data leakage
+      queryClient.clear();
       queryClient.setQueryData(["/api/user"], null);
       closeWebSocket();
       toast({ title: "Logged out" });
     },
     onError: (error: Error) => {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
       toast({
         title: "Logout failed",
         description: error.message || "An error occurred during logout.",
@@ -236,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
+        refreshUser,
       }}
     >
       {children}

@@ -1,8 +1,22 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Layout from "@/components/layout";
 import CreatePost from "@/components/create-post";
 import Stories from "@/components/stories";
 import PostCard from "@/components/post-card";
+import { useAuth } from "@/hooks/use-auth";
+
+interface Story {
+  id: number;
+  user: {
+    id: number;
+    username: string;
+    displayName: string;
+    profilePicture: string | null;
+  };
+  imageUrl: string | null;
+  content: string | null;
+  createdAt: string;
+}
 
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +50,8 @@ interface Post {
 }
 
 export default function HomePage() {
+  const { user } = useAuth();
+  
   // Fetch posts
   const { 
     data,
@@ -45,61 +61,20 @@ export default function HomePage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage 
-  } = useInfiniteQuery<Post[]>({
-    queryKey: ["/api/posts"],
-    getNextPageParam: (lastPage, allPages) => {
+} = useInfiniteQuery<Post[]>({
+  queryKey: ["/api/posts"],
+  getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === 10 ? allPages.length + 1 : undefined;
     },
-    initialPageParam: 1
+    initialPageParam: 1,
+    enabled: !!user,
   });
 
-  // Example stories data
-  const stories = [
-    {
-      id: 1,
-      user: {
-        id: 1,
-        username: "tumi_k",
-        displayName: "Tumi Khumalo",
-        profilePicture: "https://randomuser.me/api/portraits/women/45.jpg"
-      },
-      imageUrl: "https://images.unsplash.com/photo-1516651029879-dee191a1e0f1?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80",
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 2,
-      user: {
-        id: 2,
-        username: "sipho_m",
-        displayName: "Sipho Mabena",
-        profilePicture: "https://randomuser.me/api/portraits/men/22.jpg"
-      },
-      imageUrl: "https://images.unsplash.com/photo-1523867904486-8153c8af6e4e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80",
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 3,
-      user: {
-        id: 3,
-        username: "mandla_t",
-        displayName: "Mandla Thusi",
-        profilePicture: "https://randomuser.me/api/portraits/men/32.jpg"
-      },
-      imageUrl: "https://images.unsplash.com/photo-1590523277543-a94d2e4eb00b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80",
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 4,
-      user: {
-        id: 4,
-        username: "lerato_m",
-        displayName: "Lerato Moloi",
-        profilePicture: "https://randomuser.me/api/portraits/women/68.jpg"
-      },
-      imageUrl: "https://images.unsplash.com/photo-1489396160836-2c99c977e970?ixlib=rb-1.2.1&auto=format&fit=crop&w=1200&q=80",
-      createdAt: new Date().toISOString()
-    }
-  ];
+  // Fetch stories
+  const { data: storiesData = [] } = useQuery<Story[]>({
+    queryKey: ["/api/stories"],
+    enabled: !!user,
+  });
 
   return (
     <Layout>
@@ -107,7 +82,8 @@ export default function HomePage() {
           <CreatePost />
           
           {/* Stories */}
-          <Stories stories={stories} />
+          {/* Stories */}
+          <Stories stories={storiesData} />
           
           {/* Posts Feed */}
           {isLoading ? (

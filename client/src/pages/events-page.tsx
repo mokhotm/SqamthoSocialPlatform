@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, MapPin, Clock, Users, Plus, Search, Settings, ChevronRight } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, Plus, Search, Settings, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -68,7 +68,7 @@ function EventsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   
-  const { data: events = [] } = useQuery<Event[]>({
+  const { data: events = [], isLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
     queryFn: getQueryFn({ on401: "returnNull" })
   });
@@ -110,25 +110,31 @@ function EventsPage() {
             <CreateEventButton />
 
             {/* Events Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {filteredEvents.length > 0 ? (
-                filteredEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))
-              ) : (
-                <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
-                  <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-1">
-                    {searchQuery ? 'No events found' : 'No events yet'}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {searchQuery 
-                      ? 'Try adjusting your search query'
-                      : 'Create your first event to get started'}
-                  </p>
-                </div>
-              )}
-            </div>
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {filteredEvents.length > 0 ? (
+                  filteredEvents.map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))
+                ) : (
+                  <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                    <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-1">
+                      {searchQuery ? 'No events found' : 'No events yet'}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {searchQuery 
+                        ? 'Try adjusting your search query'
+                        : 'Create your first event to get started'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
     </Layout>
   );

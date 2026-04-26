@@ -10,8 +10,13 @@ export const users = pgTable('users', {
   email: text('email').notNull(),
   password_hash: text('password_hash').notNull(),
   profilePicture: text('profile_picture'),
+  coverImage: text('cover_image'), // Add coverImage field
   bio: text('bio'),
   location: text('location'),
+  gender: text('gender'),
+  ethnicity: text('ethnicity'),
+  dateOfBirth: timestamp('date_of_birth'),
+  createdAt: timestamp('created_at').defaultNow().notNull(), // Add createdAt field
 });
 
 export type User = typeof users.$inferSelect;
@@ -21,12 +26,15 @@ export const friends = pgTable('friends', {
   userId: integer('user_id').notNull().references(() => users.id),
   friendId: integer('friend_id').notNull().references(() => users.id),
   status: varchar('status', { length: 10 }).notNull().default('pending'),
+  relationship: varchar('relationship', { length: 50 }),
+  birthYear: integer('birth_year'),
+  deathYear: integer('death_year'),
+  isDeceased: boolean('is_deceased').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueFriendship: unique('unique_friendship').on(table.userId, table.friendId),
 }));
 
-export type Friend = typeof friends.$inferSelect;
 
 export const posts = pgTable("posts", {
   id: serial("id").primaryKey(),
@@ -67,6 +75,8 @@ export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   conversationId: integer("conversation_id").notNull().references(() => conversations.id),
   userId: integer("user_id").notNull().references(() => users.id),
+  senderId: integer("sender_id").notNull().references(() => users.id),
+  receiverId: integer("receiver_id").notNull().references(() => users.id),
   content: text("content").notNull(),
   read: boolean("read").default(false).notNull(),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
@@ -171,26 +181,58 @@ export const stories = pgTable("stories", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// Saved Posts table
+export const savedPosts = pgTable("saved_posts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  postId: integer("post_id").notNull().references(() => posts.id),
+  collectionName: text("collection_name").default("All Posts").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Marketplace Items table
+export const marketplaceItems = pgTable("marketplace_items", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  price: integer("price").notNull(),
+  currency: text("currency").default("ZAR").notNull(),
+  location: text("location").notNull(),
+  category: text("category").notNull(),
+  imageUrl: text("image_url"),
+  tags: jsonb("tags").default([]),
+  delivery: boolean("delivery").default(false).notNull(),
+  collection: boolean("collection").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  displayName: true,
-  bio: true,
-  profilePicture: true,
-  location: true,
+export const insertUserSchema = z.object({
+  username: z.string(),
+  displayName: z.string(),
+  email: z.string(),
+  password_hash: z.string(),
+  profilePicture: z.string().nullable().optional(),
+  coverImage: z.string().nullable().optional(),
+  bio: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  gender: z.string().nullable().optional(),
+  ethnicity: z.string().nullable().optional(),
+  dateOfBirth: z.union([z.string(), z.date()]).nullable().optional(),
+  createdAt: z.date().optional(), // createdAt has a default in DB, so it's optional for insert
 });
 
-export const insertPostSchema = createInsertSchema(posts).pick({
-  userId: true,
-  content: true,
-  imageUrl: true,
+export const insertPostSchema = z.object({
+  userId: z.number(),
+  content: z.string(),
+  imageUrl: z.string().nullable().optional(),
 });
 
-export const insertCommentSchema = createInsertSchema(comments).pick({
-  postId: true,
-  userId: true,
-  content: true,
+export const insertCommentSchema = z.object({
+  postId: z.number(),
+  userId: z.number(),
+  content: z.string(),
 });
 
 export const insertReactionSchema = createInsertSchema(reactions).pick({
@@ -199,26 +241,33 @@ export const insertReactionSchema = createInsertSchema(reactions).pick({
   type: true,
 });
 
-export const insertMessageSchema = createInsertSchema(messages);
-
-// Create insert schemas for new features
-export const insertFinancialRecordSchema = createInsertSchema(financialRecords).pick({
-  userId: true,
-  title: true,
-  description: true,
-  category: true,
-  amount: true,
-  date: true,
+export const insertMessageSchema = z.object({
+  conversationId: z.number(),
+  userId: z.number(),
+  senderId: z.number(),
+  receiverId: z.number(),
+  content: z.string(),
+  read: z.boolean().optional(),
 });
 
-export const insertHealthRecordSchema = createInsertSchema(healthRecords).pick({
-  userId: true,
-  type: true,
-  title: true,
-  description: true,
-  date: true,
-  value: true,
-  unit: true,
+// Create insert schemas for new features
+export const insertFinancialRecordSchema = z.object({
+  userId: z.number(),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  category: z.string(),
+  amount: z.number(),
+  date: z.date(),
+});
+
+export const insertHealthRecordSchema = z.object({
+  userId: z.number(),
+  type: z.string(),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  date: z.date(),
+  value: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(),
 });
 
 export const insertStorySchema = createInsertSchema(stories).pick({
@@ -256,16 +305,40 @@ export const insertEventAttendeeSchema = createInsertSchema(eventAttendees).pick
   status: true,
 });
 
-export const insertGroupMessageSchema = createInsertSchema(groupMessages).pick({
-  groupId: true,
-  userId: true,
-  content: true,
+export const insertGroupMessageSchema = z.object({
+  groupId: z.number(),
+  userId: z.number(),
+  content: z.string(),
 });
 
 export const insertFriendSchema = createInsertSchema(friends).pick({
   userId: true,
   friendId: true,
   status: true,
+  relationship: true,
+  birthYear: true,
+  deathYear: true,
+  isDeceased: true,
+});
+
+export const insertSavedPostSchema = z.object({
+  userId: z.number(),
+  postId: z.number(),
+  collectionName: z.string().optional(),
+});
+
+export const insertMarketplaceItemSchema = z.object({
+  userId: z.number(),
+  title: z.string(),
+  description: z.string(),
+  price: z.number(),
+  currency: z.string().optional(),
+  location: z.string(),
+  category: z.string(),
+  imageUrl: z.string().nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  delivery: z.boolean().optional(),
+  collection: z.boolean().optional(),
 });
 
 export const insertConversationSchema = createInsertSchema(conversations);
@@ -274,7 +347,6 @@ export const insertConversationParticipantSchema = createInsertSchema(conversati
 
 // Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = typeof insertEventSchema._type;
@@ -306,20 +378,26 @@ export type GroupMessage = typeof groupMessages.$inferSelect;
 export type InsertFriend = z.infer<typeof insertFriendSchema>;
 export type Friend = typeof friends.$inferSelect;
 
+export type InsertSavedPost = z.infer<typeof insertSavedPostSchema>;
+export type SavedPost = typeof savedPosts.$inferSelect;
+
+export type InsertMarketplaceItem = z.infer<typeof insertMarketplaceItemSchema>;
+export type MarketplaceItem = typeof marketplaceItems.$inferSelect;
+
 // Subscription schema
-export const insertSubscriptionSchema = createInsertSchema(subscriptions).pick({
-  userId: true,
-  name: true,
-  description: true,
-  amount: true,
-  currency: true,
-  billingCycle: true,
-  nextBillingDate: true,
-  category: true,
-  provider: true,
-  status: true,
-  autoRenew: true,
-  reminderDays: true,
+export const insertSubscriptionSchema = z.object({
+  userId: z.number(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  amount: z.number(),
+  currency: z.string().optional(),
+  billingCycle: z.string(),
+  nextBillingDate: z.date(),
+  category: z.string(),
+  provider: z.string(),
+  status: z.string().optional(),
+  autoRenew: z.boolean().optional(),
+  reminderDays: z.number().optional(),
 });
 
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
@@ -376,40 +454,26 @@ export const userSettings = pgTable("user_settings", {
   }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}); // Dummy comment to trigger type refresh
 
-export const insertUserSettingsSchema = createInsertSchema(userSettings).extend({
-  preferences: z.record(z.string(), z.any()).optional(),
-  contentPreferences: z.object({
-    feedType: z.string(),
-    postDisplay: z.string(),
-    defaultSort: z.string(),
-    contentFilters: z.array(z.string()),
-  }).optional(),
-  accessibilitySettings: z.object({
-    fontSize: z.string(),
-    highContrast: z.boolean(),
-    reducedMotion: z.boolean(),
-    screenReaderOptimized: z.boolean(),
-  }).optional(),
-  communicationSettings: z.object({
-    messagePrivacy: z.string(),
-    readReceipts: z.boolean(),
-    typingIndicators: z.boolean(),
-    lastSeenPrivacy: z.string(),
-  }).optional(),
-  regionalSettings: z.object({
-    timeZone: z.string(),
-    dateFormat: z.string(),
-    timeFormat: z.string(),
-    currency: z.string(),
-  }).optional(),
-  securitySettings: z.object({
-    twoFactorEnabled: z.boolean(),
-    loginAlerts: z.boolean(),
-    trustedDevices: z.array(z.string()),
-    activeSessions: z.array(z.string()),
-  }).optional(),
+export const insertUserSettingsSchema = createInsertSchema(userSettings).pick({
+  userId: true,
+  theme: true,
+  notificationsEnabled: true,
+  emailNotifications: true,
+  pushNotifications: true,
+  language: true,
+  privacyLevel: true,
+  showOnlineStatus: true,
+  showActivityStatus: true,
+  preferences: true,
+  contentPreferences: true,
+  accessibilitySettings: true,
+  communicationSettings: true,
+  regionalSettings: true,
+  securitySettings: true,
+  createdAt: true,
+  updatedAt: true,
 });
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
@@ -417,7 +481,7 @@ export type UserSettings = typeof userSettings.$inferSelect;
 // Extended schemas for frontend validation
 export const registerUserSchema = insertUserSchema.extend({
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
+}).refine((data) => data.password_hash === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });

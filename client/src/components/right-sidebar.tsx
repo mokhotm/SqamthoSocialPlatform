@@ -1,6 +1,8 @@
 import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { Loader2 } from "lucide-react";
 
 interface Conversation {
   user: {
@@ -16,145 +18,162 @@ interface Conversation {
   isOnline: boolean;
 }
 
+interface Group {
+  id: number;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  memberCount: number;
+  messageCount: number;
+}
+
+interface Trend {
+  id: number;
+  name: string;
+  count: string;
+  category: string;
+}
+
 export default function RightSidebar() {
-  const { data: conversations = [] } = useQuery<Conversation[]>({
+  const { user } = useAuth();
+
+  const { data: conversationsData } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
-    // No need to specify the queryFn since it's set globally
+    enabled: !!user,
   });
+  const conversations = conversationsData ?? [];
+
+  const { data: groupsData, isLoading: isLoadingGroups } = useQuery<Group[]>({
+    queryKey: ["/api/groups", { type: "suggested" }],
+    enabled: !!user,
+    queryFn: async () => {
+      const response = await fetch("/api/groups?type=suggested");
+      if (!response.ok) throw new Error("Failed to fetch suggested groups");
+      return response.json();
+    },
+  });
+  const groups = groupsData ?? [];
+
+  const { data: trendsData } = useQuery<Trend[]>({
+    queryKey: ["/api/trends"],
+    enabled: !!user,
+  });
+  const trends = trendsData ?? [];
 
   return (
     <aside className="hidden lg:block lg:w-1/4 pl-4 sticky top-24 self-start">
       {/* Messages Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden mb-4">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="font-medium text-gray-900 dark:text-white">Your Messages</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden mb-4 border border-gray-100 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">Your Messages</h2>
         </div>
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-80 overflow-y-auto">
           {conversations.length > 0 ? (
             conversations.map((conversation) => (
               <Link 
                 key={conversation.user.id} 
                 href={`/messages/${conversation.user.id}`} 
-                className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition border-b border-gray-200 dark:border-gray-700"
+                className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-accent/5 transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0"
               >
                 <div className="flex items-center">
                   <div className="relative">
-                    <Avatar className="h-10 w-10">
+                    <Avatar className="h-10 w-10 ring-2 ring-white dark:ring-gray-800">
                       <AvatarImage src={conversation.user.profilePicture} alt={conversation.user.displayName} />
-                      <AvatarFallback className="bg-gray-300">
+                      <AvatarFallback className="bg-gray-100 text-gray-400">
                         {conversation.user.displayName.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     {conversation.isOnline && (
-                      <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-green-500 border-2 border-white"></div>
+                      <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 border-2 border-white dark:border-gray-800"></div>
                     )}
                   </div>
-                  <div className="ml-3 flex-1">
+                  <div className="ml-3 flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100">{conversation.user.displayName}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{conversation.user.displayName}</p>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap ml-2">
                         {new Date(conversation.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{conversation.lastMessage.content}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{conversation.lastMessage.content}</p>
                   </div>
                 </div>
               </Link>
             ))
           ) : (
-            <div className="px-4 py-6 text-center text-gray-500 dark:text-gray-400 text-sm">
-              No messages yet. Start a conversation!
+            <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-xs italic">
+              No recent conversations
             </div>
           )}
         </div>
-        <div className="p-3 text-center">
-          <Link href="/messages" className="text-primary text-sm font-medium">See all in Messages</Link>
+        <div className="p-2.5 text-center bg-gray-50/50 dark:bg-gray-800/50">
+          <Link href="/messages" className="text-primary text-xs font-semibold hover:underline">View All Messages</Link>
         </div>
       </div>
 
       {/* Suggested Groups */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden mb-4">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="font-medium text-gray-900 dark:text-white">Suggested Groups</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden mb-4 border border-gray-100 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">Suggested Groups</h2>
         </div>
-        <div>
-          <div className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <div className="h-10 w-10 rounded-lg bg-gray-300 dark:bg-gray-700 overflow-hidden">
-                <img 
-                  src="https://via.placeholder.com/100/4CAF50/FFFFFF?text=DF" 
-                  alt="Durban Foodies" 
-                  className="h-full w-full object-cover" 
-                />
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="font-medium text-sm text-gray-900 dark:text-gray-100">Durban Foodies</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">15.2K members • 25 posts a day</p>
-              </div>
-              <button className="px-3 py-1 bg-primary text-white rounded-full text-xs font-medium">Join</button>
+        <div className="max-h-80 overflow-y-auto">
+          {isLoadingGroups ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
-          </div>
-          <div className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <div className="h-10 w-10 rounded-lg bg-gray-300 dark:bg-gray-700 overflow-hidden">
-                <img 
-                  src="https://via.placeholder.com/100/4CAF50/FFFFFF?text=SAT" 
-                  alt="South African Travelers" 
-                  className="h-full w-full object-cover" 
-                />
+          ) : groups.length > 0 ? (
+            groups.map((group) => (
+              <div key={group.id} className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-accent/5 transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0">
+                <div className="flex items-center">
+                  <div className="h-10 w-10 flex-shrink-0 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden border border-primary/5">
+                    {group.imageUrl ? (
+                      <img src={group.imageUrl} alt={group.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-primary font-bold text-sm">{group.name.charAt(0)}</span>
+                    )}
+                  </div>
+                  <div className="ml-3 flex-1 min-w-0">
+                    <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{group.name}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">{group.memberCount} members</p>
+                  </div>
+                  <button className="px-3 py-1 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-full text-[11px] font-semibold transition-colors ml-2">
+                    Join
+                  </button>
+                </div>
               </div>
-              <div className="ml-3 flex-1">
-                <p className="font-medium text-sm">South African Travelers</p>
-                <p className="text-xs text-gray-500">8.7K members • 12 posts a day</p>
-              </div>
-              <button className="px-3 py-1 bg-primary text-white rounded-full text-xs font-medium">Join</button>
+            ))
+          ) : (
+            <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-xs italic">
+              No group suggestions right now
             </div>
-          </div>
-          <div className="block px-4 py-3 hover:bg-gray-50 transition">
-            <div className="flex items-center">
-              <div className="h-10 w-10 rounded-lg bg-gray-300 overflow-hidden">
-                <img 
-                  src="https://via.placeholder.com/100/4CAF50/FFFFFF?text=SAS" 
-                  alt="SA Startup Network" 
-                  className="h-full w-full object-cover" 
-                />
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="font-medium text-sm">SA Startup Network</p>
-                <p className="text-xs text-gray-500">5.3K members • 8 posts a day</p>
-              </div>
-              <button className="px-3 py-1 bg-primary text-white rounded-full text-xs font-medium">Join</button>
-            </div>
-          </div>
+          )}
         </div>
-        <div className="p-3 text-center">
-          <Link href="/groups/discover" className="text-primary text-sm font-medium">Discover more groups</Link>
+        <div className="p-2.5 text-center bg-gray-50/50 dark:bg-gray-800/50 border-t border-gray-50 dark:border-gray-700">
+          <Link href="/groups" className="text-primary text-xs font-semibold hover:underline">Discover Groups</Link>
         </div>
       </div>
 
       {/* Trending Topics */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="font-medium text-gray-900 dark:text-white">Trending in South Africa</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden border border-gray-100 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700">
+          <h2 className="font-semibold text-gray-900 dark:text-white">Trending in South Africa</h2>
         </div>
         <div>
-          <Link href="/trend/protea-fire" className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition border-b border-gray-200 dark:border-gray-700">
-            <p className="font-medium text-sm text-gray-900 dark:text-gray-100">#Cricket</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">15.5K posts</p>
-          </Link>
-          <Link href="/trend/mzansi-vibes" className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition border-b border-gray-200 dark:border-gray-700">
-            <p className="font-medium text-sm text-gray-900 dark:text-gray-100">#MzansiVibes</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Entertainment • 9.2K posts</p>
-          </Link>
-          <Link href="/trend/heritage-day" className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-            <p className="font-medium text-sm text-gray-900 dark:text-gray-100">#HeritageDay2023</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Culture • 5.7K posts</p>
-            <p className="text-sm font-medium">#HeritageDay2023</p>
-            <p className="text-xs text-gray-500">Culture • 5.7K posts</p>
-          </Link>
+          {trends.length > 0 ? (
+            trends.map((trend) => (
+              <Link key={trend.id} href={`/trend/${trend.name.toLowerCase().replace('#', '')}`} className="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-accent/5 transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0">
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">{trend.category}</p>
+                <p className="font-bold text-sm text-gray-900 dark:text-gray-100 mt-0.5">{trend.name}</p>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{trend.count}</p>
+              </Link>
+            ))
+          ) : (
+            <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400 text-xs italic">
+              Nothing trending yet
+            </div>
+          )}
         </div>
-        <div className="p-3 text-center border-t border-gray-200">
-          <Link href="/trends" className="text-primary text-sm font-medium">Show more</Link>
+        <div className="p-2.5 text-center bg-gray-50/50 dark:bg-gray-800/50 border-t border-gray-50 dark:border-gray-700">
+          <button className="text-primary text-xs font-semibold hover:underline">Show more</button>
         </div>
       </div>
 

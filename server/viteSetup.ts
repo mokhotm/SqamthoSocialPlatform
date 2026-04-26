@@ -1,10 +1,13 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from 'url';
 import { createServer as createViteServer, createLogger, type ServerOptions } from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const viteLogger = createLogger();
 
@@ -25,9 +28,9 @@ export async function setupVite(app: Express, server: Server) {
     hmr: {
       protocol: 'ws',
       host: 'localhost',
-      port: 5000,
+      port: 8000,
       path: '/_hmr',
-      clientPort: 5000,
+      clientPort: 8000,
       server,
     },
     host: true,
@@ -35,8 +38,14 @@ export async function setupVite(app: Express, server: Server) {
   };
 
   const vite = await createViteServer({
-    ...viteConfig,
+    root: path.resolve(__dirname, "../client"), // Set the correct root directory
     configFile: false,
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '../client/src'),
+        '@shared': path.resolve(__dirname, '../shared'),
+      },
+    },
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {
@@ -53,15 +62,8 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      const clientTemplate = path.resolve(
-        import.meta.dirname,
-        "..",
-        "client",
-        "index.html",
-      );
-
-      // always reload the index.html file from disk incase it changes
-      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      const clientPath = path.resolve(__dirname, "../client/index.html");
+      let template = await fs.promises.readFile(clientPath, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
@@ -76,7 +78,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  const distPath = path.resolve(__dirname, "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(

@@ -19,8 +19,8 @@ export const API_CONFIG = {
     LOGIN: '/api/login',
     REGISTER: '/api/register',
     USER: '/api/user',
-    FRIENDS: '/api/friends',
-    FRIEND_REQUESTS: '/api/friend-requests',
-    FRIEND_SUGGESTIONS: '/api/friend-suggestions',
+    FRIENDS: '/api/friends/friends',
+    FRIEND_REQUESTS: '/api/friends/friend-requests',
+    FRIEND_SUGGESTIONS: '/api/friends/friend-suggestions',
   }
 };

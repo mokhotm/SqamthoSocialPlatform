@@ -2,13 +2,25 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useFriends } from "@/hooks/use-friends";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Users, Bookmark, Clock, ShoppingBag, Camera, Star, Settings, CalendarDays, UserSquare2, Heart, Wallet } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { User, Users, Bookmark, Clock, ShoppingBag, Camera, Star, Settings, CalendarDays, UserSquare2, Heart, Wallet, Loader2 } from "lucide-react";
 import { SouthAfricanAccent } from "./ui/south-african-pattern";
+import { Group } from "@shared/schema";
 
 export default function LeftSidebar() {
   const { user } = useAuth();
   const [location] = useLocation();
   const { data: friends = [] } = useFriends();
+
+  const { data: joinedGroups = [], isLoading: isLoadingGroups } = useQuery<Group[]>({
+    queryKey: ["/api/groups", { type: "joined" }],
+    queryFn: async () => {
+      const response = await fetch("/api/groups?type=joined");
+      if (!response.ok) throw new Error("Failed to fetch joined groups");
+      return response.json();
+    },
+    enabled: !!user,
+  });
 
   return (
     <aside className="hidden md:block md:w-1/4 lg:w-1/5 pr-4 sticky top-24 self-start">
@@ -185,47 +197,41 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      <div className="post-card relative bg-white overflow-hidden mt-4">
+      <div className="post-card relative bg-white dark:bg-gray-800 overflow-hidden mt-4">
         <div className="mt-4">
           <h3 className="px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">Your Communities</h3>
         </div>
         <div className="p-4">
           <ul className="space-y-3">
+            {isLoadingGroups ? (
+              <li className="flex justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </li>
+            ) : joinedGroups.length > 0 ? (
+              joinedGroups.map((group) => (
+                <li key={group.id}>
+                  <Link href={`/groups/${group.id}`} className="group flex items-center hover:text-primary transition-colors duration-200">
+                    <div className="w-8 h-8 rounded-md bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white mr-3 text-xs font-medium overflow-hidden">
+                      {group.imageUrl ? (
+                        <img src={group.imageUrl} alt={group.name} className="h-full w-full object-cover" />
+                      ) : (
+                        group.name.substring(0, 2).toUpperCase()
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{group.name}</p>
+                      <p className="text-xs text-gray-500">{group.memberCount} members</p>
+                    </div>
+                  </Link>
+                </li>
+              ))
+            ) : (
+              <li className="text-xs text-gray-500 italic text-center py-4">
+                No joined communities yet
+              </li>
+            )}
             <li>
-              <Link href="/communities/tech-hub" className="group flex items-center hover:text-primary transition-colors duration-200">
-                <div className="w-8 h-8 rounded-md bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white mr-3 text-xs font-medium">
-                  TH
-                </div>
-                <div>
-                  <p className="text-sm font-medium">South African Tech Hub</p>
-                  <p className="text-xs text-gray-500">3.4k members</p>
-                </div>
-              </Link>
-            </li>
-            <li>
-              <Link href="/communities/foodies" className="group flex items-center hover:text-primary transition-colors duration-200">
-                <div className="w-8 h-8 rounded-md bg-gradient-to-br from-accent to-primary flex items-center justify-center text-white mr-3 text-xs font-medium">
-                  JF
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Johannesburg Foodies</p>
-                  <p className="text-xs text-gray-500">1.2k members</p>
-                </div>
-              </Link>
-            </li>
-            <li>
-              <Link href="/communities/photography" className="group flex items-center hover:text-primary transition-colors duration-200">
-                <div className="w-8 h-8 rounded-md bg-gradient-to-br from-secondary to-accent flex items-center justify-center text-white mr-3 text-xs font-medium">
-                  <Camera className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Cape Town Photography</p>
-                  <p className="text-xs text-gray-500">824 members</p>
-                </div>
-              </Link>
-            </li>
-            <li>
-              <Link href="/communities" className="flex items-center text-sm font-medium text-primary mt-4 hover:underline">
+              <Link href="/groups" className="flex items-center text-sm font-medium text-primary mt-4 hover:underline">
                 See all communities
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />

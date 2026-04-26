@@ -19,7 +19,8 @@ import {
   Home,
   Gift,
   Music,
-  Book
+  Book,
+  Loader2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -29,6 +30,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
+import { MarketplaceItem } from "@shared/schema";
+
 const CATEGORIES = [
   { name: 'All', icon: Store },
   { name: 'Fashion', icon: Shirt },
@@ -38,99 +43,14 @@ const CATEGORIES = [
   { name: 'Books', icon: Book },
 ];
 
-// Mock data - would come from API in real app
-const LISTINGS = [
-  {
-    id: '1',
-    title: 'Handcrafted Zulu Beadwork Jewelry',
-    description: 'Beautiful traditional beadwork made by local artisans in KwaZulu-Natal. Each piece tells a unique story.',
-    price: 450,
-    currency: 'ZAR',
-    location: 'Durban, KZN',
-    category: 'Local Artisans',
-    image: null,
-    seller: {
-      name: 'Nomvula Arts',
-      username: 'nomvulaarts',
-      avatar: null,
-      rating: 4.8,
-      verified: true
-    },
-    tags: ['handmade', 'traditional', 'jewelry'],
-    delivery: true,
-    collection: true
-  },
-  {
-    id: '2',
-    title: 'Organic Rooibos Tea Collection',
-    description: 'Premium organic rooibos tea sourced from the Cederberg Mountains. Various flavors available.',
-    price: 180,
-    currency: 'ZAR',
-    location: 'Cape Town, WC',
-    category: 'Food & Drinks',
-    image: null,
-    seller: {
-      name: 'Cape Tea Co.',
-      username: 'capetea',
-      avatar: null,
-      rating: 4.9,
-      verified: true
-    },
-    tags: ['organic', 'local', 'tea'],
-    delivery: true,
-    collection: true
-  },
-  {
-    id: '3',
-    title: 'African Print Laptop Bags',
-    description: 'Stylish laptop bags made with authentic African print fabrics. Available in multiple sizes.',
-    price: 650,
-    currency: 'ZAR',
-    location: 'Johannesburg, GP',
-    category: 'Fashion',
-    image: null,
-    seller: {
-      name: 'Urban Afrika',
-      username: 'urbanafrika',
-      avatar: null,
-      rating: 4.7,
-      verified: true
-    },
-    tags: ['fashion', 'accessories', 'handmade'],
-    delivery: true,
-    collection: false
-  }
-];
-
-interface Listing {
-  id: string;
-  title: string;
-  description: string;
-  price: number;
-  currency: string;
-  location: string;
-  category: string;
-  image: string | null;
-  seller: {
-    name: string;
-    username: string;
-    avatar: string | null;
-    rating: number;
-    verified: boolean;
-  };
-  tags: string[];
-  delivery: boolean;
-  collection: boolean;
-}
-
-function ListingCard({ listing }: { listing: Listing }) {
+function ListingCard({ listing }: { listing: any }) {
   return (
     <Card className="overflow-hidden h-full flex flex-col">
       <div className="relative">
         <div className="aspect-square bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-          {listing.image ? (
+          {listing.imageUrl ? (
             <img 
-              src={listing.image || ''} 
+              src={listing.imageUrl || ''} 
               alt={listing.title} 
               className="object-cover w-full h-full"
             />
@@ -169,18 +89,15 @@ function ListingCard({ listing }: { listing: Listing }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Avatar className="h-6 w-6">
-              <AvatarImage src={listing.seller.avatar || ''} />
-              <AvatarFallback>{listing.seller.name[0]}</AvatarFallback>
+              <AvatarImage src={listing.seller?.avatar || ''} />
+              <AvatarFallback>{(listing.seller?.name || 'S')[0]}</AvatarFallback>
             </Avatar>
-            <div className="flex items-center">
-              <span className="text-sm font-medium mr-1">{listing.seller.name}</span>
-              {listing.seller.verified && (
-                <span className="inline-flex items-center px-1 text-xs bg-gray-100 text-gray-800 rounded">✓</span>
-              )}
-              <div className="text-sm text-gray-500">
-                {listing.delivery ? 'Delivery Available' : ''}
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">{listing.seller?.name || 'Seller'}</span>
+              <div className="text-[10px] text-gray-500">
+                {listing.delivery ? 'Delivery' : ''}
                 {listing.delivery && listing.collection ? ' • ' : ''}
-                {listing.collection ? 'Collection Available' : ''}
+                {listing.collection ? 'Collection' : ''}
               </div>
             </div>
           </div>
@@ -204,19 +121,23 @@ function ListingCard({ listing }: { listing: Listing }) {
 function MarketplacePage() {
   const { } = useAuth(); // Keep hook for authentication check
 
-
   // Filter states
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [selectedLocation, setSelectedLocation] = React.useState('');
-  const [selectedPriceRange, setSelectedPriceRange] = React.useState('');
+  const [selectedLocation, setSelectedLocation] = React.useState('all');
+  const [selectedPriceRange, setSelectedPriceRange] = React.useState('all');
   const [selectedCategory, setSelectedCategory] = React.useState('All');
 
+  const { data: listings = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/marketplace"],
+    queryFn: getQueryFn({ on401: "returnNull" })
+  });
+
   // Filter the listings based on all criteria
-  const filteredListings = LISTINGS.filter(listing => {
+  const filteredListings = listings.filter(listing => {
     // Search query filter
     const matchesSearch = listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          listing.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         listing.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+                         (listing.tags || []).some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
 
     // Location filter
     const matchesLocation = selectedLocation === 'all' || 
@@ -293,8 +214,8 @@ function MarketplacePage() {
                     variant="outline"
                     onClick={() => {
                       setSearchQuery('');
-                      setSelectedLocation('');
-                      setSelectedPriceRange('');
+                      setSelectedLocation('all');
+                      setSelectedPriceRange('all');
                       setSelectedCategory('All');
                     }}
                   >
@@ -323,11 +244,23 @@ function MarketplacePage() {
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredListings.map(listing => (
-                <ListingCard key={listing.id} listing={listing} />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredListings.length > 0 ? (
+                  filteredListings.map(listing => (
+                    <ListingCard key={listing.id} listing={listing} />
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-12 text-gray-500">
+                    No items found.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
     </Layout>

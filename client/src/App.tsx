@@ -22,8 +22,9 @@ import MoneyPage from "./pages/money-page";
 import TestPage from "./pages/test-page";
 import MinimalTest from "./pages/minimal-test";
 import { ProtectedRoute } from "./lib/protected-route";
-import { AuthProvider } from "./hooks/use-auth";
+import { AuthProvider, useAuth } from "./hooks/use-auth";
 import { ThemeProvider } from "./hooks/use-theme";
+import { Loader2 } from "lucide-react";
 
 function Router() {
   return (
@@ -51,13 +52,31 @@ function Router() {
   );
 }
 
+function AppContent() {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Router />
+      <Toaster />
+    </>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <Router />
-          <Toaster />
+          <AppContent />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
